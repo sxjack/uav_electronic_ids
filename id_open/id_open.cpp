@@ -14,7 +14,7 @@
  * 
  * A case of fighting the API to get it to do what I want.
  * For certain things, it is easier to bypass the 'user friendly' Arduino API and
- * use the esp functions.
+ * use the esp_ functions.
  * 
  * Reference 
  * 
@@ -34,7 +34,7 @@
  * 
  */
      
-#define DIAGNOSTICS 1
+#define DIAGNOSTICS 0
 
 //
 
@@ -91,8 +91,6 @@ ID_OpenDrone::ID_OpenDrone() {
   advData.min_interval        = 0x0006;
   advData.max_interval        = 0x0050;
   advData.flag                = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
-  // advData.service_uuid_len    = 16;
-  // advData.p_service_uuid      = (uint8_t *) &service_uuid;
 
   memset(&advParams,0,sizeof(advParams));
 
@@ -104,21 +102,9 @@ ID_OpenDrone::ID_OpenDrone() {
   advParams.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
   advParams.peer_addr_type    = BLE_ADDR_TYPE_PUBLIC;
 
-// 0000fffa-0000-1000-8000-00805f9b34fb
+// 
 
-  memset(service_uuid,0,sizeof(service_uuid));
-
-  service_uuid[13] = 0xff;
-  service_uuid[12] = 0xfa;
-  service_uuid[9]  = 0x10;
-  service_uuid[7]  = 0x80;
-  
-  service_uuid[5]  = 0x00;
-  service_uuid[4]  = 0x80;
-  service_uuid[3]  = 0x5f;
-  service_uuid[2]  = 0x9b;
-  service_uuid[1]  = 0x34;
-  service_uuid[0]  = 0xfb;
+  service_uuid = BLEUUID("0000fffa-0000-1000-8000-00805f9b34fb");
 
 #endif // 0.64.3 | ASTM
 
@@ -150,7 +136,7 @@ ID_OpenDrone::ID_OpenDrone() {
   auth_data->AuthType               = ODID_AUTH_NONE; // 0
 
   selfID_data->DescType             = ODID_DESC_TYPE_TEXT;
-  strcpy(selfID_data->Desc,"Model Aircraft");
+  strcpy(selfID_data->Desc,"Recreational");
 
   odid_initSystemData(system_data);
 
@@ -169,7 +155,7 @@ ID_OpenDrone::ID_OpenDrone() {
  *
  */
 
-void ID_OpenDrone::init(char *op) {
+void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   int  status;
   char text[128];
@@ -181,17 +167,40 @@ void ID_OpenDrone::init(char *op) {
   Debug_Serial = &Serial;
 #endif
 
-  //
+  // operator
 
-  UAS_operator = op;
+  UAS_operator = parameters->UAS_operator;
 
-  strncpy(operatorID_data->OperatorId,op,ODID_ID_SIZE);
+  strncpy(operatorID_data->OperatorId,parameters->UAS_operator,ODID_ID_SIZE);
   operatorID_data->OperatorId[sizeof(operatorID_data->OperatorId) - 1] = 0;
 
-  basicID_data->IDType              = ODID_IDTYPE_CAA_REGISTRATION_ID;
-  basicID_data->UAType              = ODID_UATYPE_NONE;
-  strncpy(basicID_data->UASID,op,ODID_ID_SIZE);
+  // basic
+
+  basicID_data->UAType = ODID_UATYPE_NONE;
+  basicID_data->IDType = ODID_IDTYPE_CAA_REGISTRATION_ID;
+
+  strncpy(basicID_data->UASID,
+          (parameters->UAV_id[0]) ? parameters->UAV_id: parameters->UAS_operator,
+          ODID_ID_SIZE);
+
   basicID_data->UASID[sizeof(basicID_data->UASID) - 1] = 0;
+
+  // system
+
+  if (parameters->region < 2) {
+
+    system_data->ClassificationType = (ODID_classification_type_t) parameters->region;
+  }
+
+  if (parameters->EU_category < 4) {
+
+    system_data->CategoryEU = (ODID_category_EU_t) parameters->EU_category;
+  }
+
+  if (parameters->EU_class < 8) {
+
+    system_data->ClassEU = (ODID_class_EU_t) parameters->EU_class;
+  }
 
   //
 
@@ -241,8 +250,34 @@ void ID_OpenDrone::init(char *op) {
 
 #if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
 
+  int               power_db; 
+  esp_power_level_t power;
+
   BLEDevice::init(UAS_operator);
-  BLEDevice::setPower(ESP_PWR_LVL_P4); // ESP_PWR_LVL_N14 ...  ESP_PWR_LVL_N2 ... ESP_PWR_LVL_P4, ESP_PWR_LVL_P7
+
+  // Using BLEDevice::setPower() seems to have no effect. 
+  // ESP_PWR_LVL_N12 ...  ESP_PWR_LVL_N0 ... ESP_PWR_LVL_P9
+
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT,ESP_PWR_LVL_P9); 
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,ESP_PWR_LVL_P9); 
+
+  power    = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT);
+  power_db = 3 * ((int) power - 4); 
+
+#if BLE_SERVICES
+
+  // Be careful here, if BLEAdvertising gets involved, it messes things up because it insists on
+  // transmitting stuff of no interest to us leaving no room for our message.
+
+  ble_server       = BLEDevice::createServer();
+  ble_service_dbm  = ble_server->createService((uint16_t) 0x1804);
+  ble_char_dbm     = ble_service_dbm->createCharacteristic((uint16_t) 0x2a07,BLECharacteristic::PROPERTY_READ);
+
+  ble_char_dbm->setValue(power_db);
+
+  ble_service_dbm->start();
+
+#endif
 
 #endif
 
@@ -448,10 +483,9 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
     status = esp_ble_gap_stop_advertising();
   }
 
- 
   ble_message[j++] = 0x1e;
 #if ID_OD_ASTM_BT
-  ble_message[j++] = 0x16; // 0xff
+  ble_message[j++] = 0x16;
   ble_message[j++] = 0xfa; // ASTM
   ble_message[j++] = 0xff; //
 #else

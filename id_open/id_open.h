@@ -18,6 +18,8 @@
 #define ID_OD_ASTM_BT    1 // ASTM F3411-19.
 #define ID_OD_0_64_3_BT  0 // Transmit a frame as defined in ODID specification version 0.64.3.
 
+#define BLE_SERVICES     0 // Experimental.
+
 #if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
 #include "BLEDevice.h"
 #include "BLEUtils.h"
@@ -33,7 +35,7 @@ class ID_OpenDrone {
 
 public:
            ID_OpenDrone();
-  void     init(char *);
+  void     init(struct UTM_parameters *);
   int      transmit(struct UTM_data *);
 
 private:
@@ -53,9 +55,14 @@ private:
 #if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
   uint8_t                 ble_message[36], counter = 0;
   int                     advertising = 0;
-  uint8_t                 service_uuid[16];
   esp_ble_adv_data_t      advData;
   esp_ble_adv_params_t    advParams;
+  BLEUUID                 service_uuid;
+#if BLE_SERVICES
+  BLEServer              *ble_server = NULL;
+  BLEService             *ble_service_dbm = NULL;
+  BLECharacteristic      *ble_char_dbm = NULL;
+#endif
 #endif
 
   ODID_UAS_Data           UAS_data;
