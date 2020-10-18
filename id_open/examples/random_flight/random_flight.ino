@@ -20,6 +20,7 @@ static double deg2rad = 0.0, m_deg_lat = 0.0, m_deg_long = 0.0;
 
 void setup() {
 
+  char   text[64];
   double sin_lat, cos_lat, a, b, radius, lat_d, long_d;
 
   //
@@ -61,14 +62,29 @@ void setup() {
 
   deg2rad     = (4.0 * atan(1.0)) / 180.0;
 
-  sin_lat     = sin(lat_d  * deg2rad);
-  cos_lat     = cos(long_d * deg2rad);
+  sin_lat     = sin(lat_d * deg2rad);
+  cos_lat     = cos(lat_d * deg2rad);
   a           = 0.08181922;
   b           = a * sin_lat;
   radius      = 6378137.0 * cos_lat / sqrt(1.0 - (b * b));
   m_deg_long  = deg2rad * radius;
   m_deg_lat   = 111132.954 - (559.822 * cos(2.0 * lat_d * deg2rad)) - 
                 (1.175 *  cos(4.0 * lat_d * deg2rad));
+
+  //
+
+  Serial.print("\r\n");
+
+  sprintf(text,"%d degrees/radian\r\n",(int) (1.0 / deg2rad));
+  Serial.print(text);
+
+  sprintf(text,"%d m per degree latitude\r\n",(int) m_deg_lat);
+  Serial.print(text);
+
+  sprintf(text,"%d m per degree longitude\r\n",(int) m_deg_long);
+  Serial.print(text);
+
+  Serial.print("\r\n");
 
   //
 
