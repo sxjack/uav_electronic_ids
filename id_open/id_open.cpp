@@ -143,6 +143,7 @@ ID_OpenDrone::ID_OpenDrone() {
   system_data->OperatorLocationType = ODID_OPERATOR_LOCATION_TYPE_TAKEOFF;
   system_data->ClassificationType   = ODID_CLASSIFICATION_TYPE_EU;
   system_data->AreaCount            = 1;
+  system_data->AreaRadius           = 500;
   system_data->CategoryEU           = ODID_CATEGORY_EU_SPECIFIC;
   system_data->ClassEU              = ODID_CLASS_EU_UNDECLARED;
 
@@ -218,7 +219,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   int           i;
   wifi_config_t wifi_config;
 
-  strncpy(ssid,op,i = sizeof(ssid)); ssid[i - 1] = 0;
+  strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
   WiFi.softAP(ssid,NULL,wifi_channel);
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
