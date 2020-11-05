@@ -16,7 +16,7 @@
  *
  * Needs testing against a known good app.
  * There is an offset of 4 bytes (the OUI ?) when tested against the Gendarmerie Nationale python script.
- * 
+ * Works with 'recepteur_balise.ino' (http://icnisnlycee.free.fr/index.php/57-nsi/projets/75-balise-de-signalement-pour-aeronefs-sans-personne-a-bord)
  * 
  */
 
@@ -63,7 +63,7 @@ ID_France::ID_France() {
   memset(wifi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
   memset(manufacturer,'A',i = sizeof(manufacturer)); manufacturer[i - 1] = 0;
-  memset(model,'B',i = sizeof(model));               model[i - 1]        = 0;
+  strncpy(model,"DIY",i = sizeof(model));            model[i - 1]        = 0;
   memset(wifi_frame,0,sizeof(wifi_frame));
 
   header = (struct fid_header *) wifi_frame;
@@ -235,8 +235,8 @@ void ID_France::init(const char *op) {
   payload->L6          = sizeof(payload->altitude);
   payload->altitude[1] = 31; // m
 
-  // payload->T7          =  7;
-  // payload->L7          = sizeof(payload->height);
+  payload->T7          =  7;
+  payload->L7          = sizeof(payload->height);
 
   payload->T8          =  8;
   payload->L8          = sizeof(payload->base_lat);
@@ -360,6 +360,10 @@ int ID_France::transmit(struct UTM_data *utm_data) {
     conv.i16              = (int16_t) (utm_data->alt_msl_m);
     payload->altitude[1]  =  conv.u16 & 0xff; 
     payload->altitude[0]  = (conv.u16 >> 8) & 0xff; 
+
+    conv.i16              = (int16_t) (utm_data->alt_agl_m);
+    payload->height[1]    =  conv.u16 & 0xff; 
+    payload->height[0]    = (conv.u16 >> 8) & 0xff; 
 
     payload->ground_speed = (uint8_t) (utm_data->speed_kn * 0.514444);
 

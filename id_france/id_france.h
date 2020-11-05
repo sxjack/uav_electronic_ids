@@ -50,8 +50,8 @@ struct __attribute__((__packed__)) fid_payload {
   uint8_t longitude[4];
   uint8_t T6, L6;
   uint8_t altitude[2]; // m msl
-  // uint8_t T7, L7;
-  // uint8_t height[2]; // m agl
+  uint8_t T7, L7;
+  uint8_t height[2]; // m agl
   uint8_t T8, L8;
   uint8_t base_lat[4];
   uint8_t T9, L9;
