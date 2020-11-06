@@ -66,6 +66,7 @@ esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx,const void *buffer,int len,bool
 
 ID_OpenDrone::ID_OpenDrone() {
 
+  int                i;
   static const char *dummy = "";
 
   //
@@ -114,10 +115,17 @@ ID_OpenDrone::ID_OpenDrone() {
 
   basicID_data    = &UAS_data.BasicID;
   location_data   = &UAS_data.Location;
-  auth_data       = &UAS_data.Auth[0];
   selfID_data     = &UAS_data.SelfID;
   system_data     = &UAS_data.System;
   operatorID_data = &UAS_data.OperatorID;
+
+  for (i = 0; i < ODID_AUTH_MAX_PAGES; ++i) {
+
+    auth_data[i] = &UAS_data.Auth[i];
+
+    auth_data[i]->DataPage = i;
+    auth_data[i]->AuthType = ODID_AUTH_NONE; // 0
+  }
 
   basicID_data->IDType              = ODID_IDTYPE_NONE; // 0
   basicID_data->UAType              = ODID_UATYPE_NONE; // 0
@@ -132,8 +140,6 @@ ID_OpenDrone::ID_OpenDrone() {
   location_data->BaroAccuracy       = ODID_VER_ACC_10_METER;
   location_data->SpeedAccuracy      = ODID_SPEED_ACC_10_METERS_PER_SECOND;
   location_data->TSAccuracy         = ODID_TIME_ACC_1_0_SECOND;
-
-  auth_data->AuthType               = ODID_AUTH_NONE; // 0
 
   selfID_data->DescType             = ODID_DESC_TYPE_TEXT;
   strcpy(selfID_data->Desc,"Recreational");
@@ -177,8 +183,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   // basic
 
-  basicID_data->UAType = ODID_UATYPE_NONE;
-  basicID_data->IDType = ODID_IDTYPE_CAA_REGISTRATION_ID;
+  basicID_data->UAType = (ODID_uatype_t) parameters->UA_type;
+  basicID_data->IDType = (ODID_idtype_t) parameters->ID_type;
 
   strncpy(basicID_data->UASID,
           (parameters->UAV_id[0]) ? parameters->UAV_id: parameters->UAS_operator,
@@ -207,7 +213,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   encodeBasicIDMessage(&basicID_enc,basicID_data);
   encodeLocationMessage(&location_enc,location_data);
-  encodeAuthMessage(&auth_enc,auth_data);
+  encodeAuthMessage(&auth_enc,auth_data[0]);
   encodeSelfIDMessage(&selfID_enc,selfID_data);
   encodeSystemMessage(&system_enc,system_data);
   encodeOperatorIDMessage(&operatorID_enc,operatorID_data);
@@ -289,9 +295,39 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
  *
  */
 
+void ID_OpenDrone::set_auth(const char *auth) {
+
+  int      i, l, p = 1;
+  time_t   secs;
+
+  time(&secs);
+
+  l = strlen(auth);
+
+  strncpy(auth_data[0]->AuthData,auth,i = 16); auth_data[0]->AuthData[i] = 0;
+
+  if (l > 16) {
+
+// TODO
+
+     l = 16;
+  }
+
+  auth_data[0]->AuthType  = (ODID_authtype_t) 0x0a;
+  auth_data[0]->PageCount = p;
+  auth_data[0]->Length    = l;
+  auth_data[0]->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+
+  return;
+}
+
+/*
+ *
+ */
+
 int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
-  int                     status, valid_data;
+  int                     i, status, valid_data;
   char                    text[128];
   uint32_t                msecs;
   static int              phase = 0;
@@ -321,9 +357,14 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   UAS_data.SystemValid     =
   UAS_data.OperatorIDValid = 0;
 
+  for (i = 0; i < ODID_AUTH_MAX_PAGES; ++i) {
+
+    UAS_data.AuthValid[i] = 0;
+  }
+
   if ((msecs - last_msecs) > 74) {
 
-    last_msecs = msecs;
+    last_msecs = (last_msecs) ? last_msecs + 75: msecs;
 
     switch (++phase) {
 
@@ -382,6 +423,23 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       valid_data = UAS_data.OperatorIDValid = 1;
       transmit_ble((uint8_t *) &operatorID_enc,sizeof(operatorID_enc));
+      break;
+
+    case 38:
+
+      if (auth_data[0]->PageCount) {
+
+        encodeAuthMessage(&auth_enc,auth_data[auth_page]);
+        valid_data = UAS_data.AuthValid[auth_page] = 1;
+
+        transmit_ble((uint8_t *) &auth_enc,sizeof(auth_enc));
+
+        if (++auth_page >= auth_data[0]->PageCount) {
+
+          auth_page = 0;
+        }
+      }
+
       break;
 
     default:
@@ -478,7 +536,7 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
   memset(ble_message,0,sizeof(ble_message));
 
   //
-	
+
   if (advertising) {
 
     status = esp_ble_gap_stop_advertising();

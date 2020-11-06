@@ -20,6 +20,10 @@
 
 #define BLE_SERVICES     0 // Experimental.
 
+#define ID_OD_AUTH_DATUM 1546300800L
+
+//
+
 #if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
 #include "BLEDevice.h"
 #include "BLEUtils.h"
@@ -36,6 +40,7 @@ class ID_OpenDrone {
 public:
            ID_OpenDrone();
   void     init(struct UTM_parameters *);
+  void     set_auth(const char *);
   int      transmit(struct UTM_data *);
 
 private:
@@ -43,6 +48,7 @@ private:
   int      transmit_wifi(struct UTM_data *);
   int      transmit_ble(uint8_t *,int);
 
+  int                     auth_page = 0;
   char                   *UAS_operator;
   int16_t                 phase = 0;
   Stream                 *Debug_Serial = NULL;
@@ -68,7 +74,7 @@ private:
   ODID_UAS_Data           UAS_data;
   ODID_BasicID_data      *basicID_data;
   ODID_Location_data     *location_data;
-  ODID_Auth_data         *auth_data;
+  ODID_Auth_data         *auth_data[ODID_AUTH_MAX_PAGES];
   ODID_SelfID_data       *selfID_data;
   ODID_System_data       *system_data;
   ODID_OperatorID_data   *operatorID_data;
