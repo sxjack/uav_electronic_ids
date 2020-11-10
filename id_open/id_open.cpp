@@ -34,7 +34,7 @@
  * 
  */
      
-#define DIAGNOSTICS 0
+#define DIAGNOSTICS 1
 
 //
 
@@ -222,8 +222,9 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
 #if ID_OD_WIFI
 
-  int           i;
-  wifi_config_t wifi_config;
+  int            i;
+  int8_t         wifi_power;
+  wifi_config_t  wifi_config;
 
   strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
   WiFi.softAP(ssid,NULL,wifi_channel);
@@ -236,6 +237,9 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   // esp_wifi_set_country();
   status = esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
+
+  // esp_wifi_set_max_tx_power(78);
+  esp_wifi_get_max_tx_power(&wifi_power);
 
   String address = WiFi.macAddress();
 
@@ -251,6 +255,9 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
             WiFi_mac_addr[0],WiFi_mac_addr[1],WiFi_mac_addr[2],
             WiFi_mac_addr[3],WiFi_mac_addr[4],WiFi_mac_addr[5]);
     Serial.print(text);
+// power <= 72, dbm = power/4, but 78 = 20dbm. 
+    sprintf(text,"max_tx_power():  %d dBm\r\n",(int) ((wifi_power + 2) / 4));
+    Debug_Serial->print(text);
   }
 
 #endif
@@ -566,7 +573,7 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
 
   advertising = 1;
 
-#if DIAGNOSTICS
+#if DIAGNOSTICS && 0
 
   char       text[64], text2[34];
   static int first = 1;

@@ -13,12 +13,11 @@
 #ifndef ID_OPENDRONE_H
 #define ID_OPENDRONE_H
 
-#define ID_OD_WIFI       0
+#define ID_OD_WIFI       1
+#define ID_OD_ASTM_BT    1        // ASTM F3411-19.
+#define ID_OD_0_64_3_BT  0        // Transmit a frame as defined in ODID specification version 0.64.3.
 
-#define ID_OD_ASTM_BT    1 // ASTM F3411-19.
-#define ID_OD_0_64_3_BT  0 // Transmit a frame as defined in ODID specification version 0.64.3.
-
-#define BLE_SERVICES     0 // Experimental.
+#define BLE_SERVICES     0        // Experimental.
 
 #define ID_OD_AUTH_DATUM 1546300800L
 
