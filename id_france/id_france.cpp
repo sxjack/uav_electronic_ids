@@ -22,6 +22,8 @@
 
 #define DIAGNOSTICS 1
 
+#define SATS_REQ    SATS_LEVEL_2
+
 //
 
 #if defined(ARDUINO_ARCH_ESP32)
@@ -62,8 +64,8 @@ ID_France::ID_France() {
 
   memset(wifi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
-  memset(manufacturer,'A',i = sizeof(manufacturer)); manufacturer[i - 1] = 0;
-  strncpy(model,"DIY",i = sizeof(model));            model[i - 1]        = 0;
+  memset(manufacturer,'0',i = sizeof(manufacturer)); manufacturer[i - 1] = 0;
+  strncpy(model,"000",i = sizeof(model));            model[i - 1]        = 0;
   memset(wifi_frame,0,sizeof(wifi_frame));
 
   header = (struct fid_header *) wifi_frame;
@@ -80,7 +82,10 @@ void ID_France::init(const char *op) {
   int            i, offset;
   char           text[128];
   float          lat_f, long_f, pi;
+  int8_t         max_power = 0;
+  const uint32_t wifi_oui = ID_FRANCE_OUI;
   wifi_config_t  wifi_config;
+
 
   text[0]  = 
   text[63] = 0;
@@ -105,13 +110,16 @@ void ID_France::init(const char *op) {
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
   
   wifi_config.ap.beacon_interval = 1000;
-  // wifi_config.ap.ssid_hidden     = 1;
+  wifi_config.ap.ssid_hidden     = 1;
   
   esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
 
   // esp_wifi_set_country();
   esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
 
+  // esp_wifi_set_max_tx_power(78);
+  esp_wifi_get_max_tx_power(&max_power);
+  
   //
 
   header->control[0]        = 0x80;
@@ -135,12 +143,15 @@ void ID_France::init(const char *op) {
   }
 
   if (Debug_Serial) {
-    
+
     // sprintf(text,"WiFi.macAddress: %s\r\n",address.c_str());
     // Debug_Serial->print(text);
     sprintf(text,"esp_read_mac():  %02x:%02x:%02x:%02x:%02x:%02x\r\n",
             wifi_mac_addr[0],wifi_mac_addr[1],wifi_mac_addr[2],
             wifi_mac_addr[3],wifi_mac_addr[4],wifi_mac_addr[5]);
+    Debug_Serial->print(text);
+
+    sprintf(text,"max_tx_power():  %d dBm\r\n",(int) ((max_power + 2) / 4));
     Debug_Serial->print(text);
   }
 
@@ -159,14 +170,12 @@ void ID_France::init(const char *op) {
 
   payload->preamble[0] = 0xdd;
   payload->preamble[1] = sizeof(struct fid_payload) - 2; // ?
-#if ID_FRANCE_OUI
-  const uint32_t wifi_oui = ID_FRANCE_OUI;
 
   payload->preamble[2] = (wifi_oui >> 16) & 0xff;
   payload->preamble[3] = (wifi_oui >>  8) & 0xff;
   payload->preamble[4] =  wifi_oui        & 0xff;
   payload->preamble[5] = 0x01; // Vendor specific type.
-#endif  
+
   payload->T1      = 0x01;
   payload->L1      = sizeof(payload->version);
   payload->version = 0x01;
@@ -330,14 +339,16 @@ int ID_France::transmit(struct UTM_data *utm_data) {
   elapsed = msecs - last_locn_msecs;
 
   if ((((movement > 29.0)&&(elapsed > 250))||(elapsed > 2999))&&
-      (utm_data->satellites >= SATS_LEVEL_1)) { // should be _2
+      (utm_data->satellites >= SATS_REQ)) {
 
+#if DIAGNOSTICS && 0
     if (Debug_Serial) {
 
       sprintf(text,"%d sats, HDOP %s, %d m, %u msecs\r\n",
               utm_data->satellites,utm_data->hdop_s,(int) movement,elapsed);
       Debug_Serial->print(text);
     }
+#endif
 
     last_locn_msecs = msecs;
 
@@ -373,7 +384,7 @@ int ID_France::transmit(struct UTM_data *utm_data) {
 
     wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,wifi_frame,frame_length,true);
 
-#if 1
+#if DIAGNOSTICS && 0
     dump_frame();
 #endif
   }

@@ -33,11 +33,7 @@ struct __attribute__((__packed__)) fid_header {
 
 struct __attribute__((__packed__)) fid_payload {
 
-#if ID_FRANCE_OUI
   uint8_t preamble[6];
-#else
-  uint8_t preamble[2];
-#endif
   uint8_t T1, L1;
   uint8_t version;
   uint8_t T2, L2;
