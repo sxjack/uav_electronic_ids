@@ -10,6 +10,10 @@ The TFT_eSPI library was used to drive the ST7735.
 
 Requires opendroneid.c, opendroneid.h and odid_wifi.h from https://github.com/opendroneid. A modified version of wifi.c is used.
 
+https://github.com/olikraus/u8g2
+https://github.com/Bodmer/TFT_eSPI
+
+https://uk.banggood.com/Geekcreit-ESP32-WiFi+bluetooth-Development-Board-Ultra-Low-Power-Consumption-Dual-Cores-Pins-Unsoldered-p-1214159.html
 https://www.banggood.com/1_3-Inch-4Pin-White-OLED-LCD-Display-12864-IIC-I2C-Interface-Module-p-1067874.html
 https://www.banggood.com/1_8-Inch-LCD-Screen-SPI-Serial-Port-Module-TFT-Color-Display-Touch-Screen-ST7735-p-1414465.html
 
