@@ -36,10 +36,15 @@ struct __attribute__((__packed__)) fid_payload {
   uint8_t preamble[6];
   uint8_t T1, L1;
   uint8_t version;
+#if 1
+  uint8_t T2_3, L2_3;
+  uint8_t id_france[30];
+#else
   uint8_t T2, L2;
   uint8_t id_france[30];
-  // uint8_t T3, L3;
-  // uint8_t id_ansi[30];
+  uint8_t T3, L3;
+  uint8_t id_ansi[30];
+#endif
   uint8_t T4, L4;
   uint8_t latitude[4];
   uint8_t T5, L5;
@@ -64,18 +69,20 @@ class ID_France {
 
  public:
             ID_France();
+   void     init(struct UTM_parameters *);
    void     init(const char *);
    int      transmit(struct UTM_data *);
 
  private:
 
-   void                 encode_latlong(float,float,uint8_t *,uint8_t *);
+   void                 init(const char *,const char *);
+   void                 encode_latlong(double,double,uint8_t *,uint8_t *);
    void                 dump_frame();
 
    int                  frame_length;
-   char                *UAS_operator, *UAV, ssid[32], 
+   char                *UAS_operator, *UAV_id, ssid[32],
                         manufacturer[4], model[4];
-   float                m_deg_lat = 0.0, m_deg_long = 0.0, deg2rad, last_lat, last_long;
+   double               last_lat, last_long, m_deg_lat = 0.0, m_deg_long = 0.0;
    int16_t              phase = 0, sequence = 0;
    uint8_t              wifi_channel, 
                         wifi_mac_addr[6], wifi_frame[256];
@@ -83,6 +90,7 @@ class ID_France {
    Stream              *Debug_Serial = NULL;
    struct fid_header   *header = NULL;
    struct fid_payload  *payload = NULL;
+   UTM_Utilities        utm_utils;
 };
 
 #endif

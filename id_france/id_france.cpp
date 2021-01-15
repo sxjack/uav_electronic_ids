@@ -6,6 +6,11 @@
  *
  * MIT licence.
  *
+ * 21/01/xx Modified so that it will transmit operator ID or serial number.
+ *          Floats changed to doubles.
+ *          Calculation of m/deg moved to common support library.
+ *
+ *
  * This class was inspired by droneID_FR.h by Pierre Kancir (https://github.com/khancyr/droneID_FR). 
  *
  * Reference
@@ -58,7 +63,7 @@ ID_France::ID_France() {
   static const char *dummy = "";
 
   UAS_operator = (char *) dummy;
-  UAV          = (char *) dummy;
+  UAV_id       = (char *) dummy;
 
   wifi_channel = 6; // Do not change.
 
@@ -79,9 +84,27 @@ ID_France::ID_France() {
 
 void ID_France::init(const char *op) {
 
+  init(op,NULL);
+  
+  return;
+}
+
+//
+
+void ID_France::init(struct UTM_parameters *parameters) {
+
+  init(parameters->UAS_operator,parameters->UAV_id);
+  
+  return;
+}
+
+//
+
+void ID_France::init(const char *op,const char *uav) {
+
   int            i, offset;
   char           text[128];
-  float          lat_f, long_f, pi;
+  double         lat_d, long_d;
   int8_t         max_power = 0;
   const uint32_t wifi_oui = ID_FRANCE_OUI;
   wifi_config_t  wifi_config;
@@ -89,9 +112,6 @@ void ID_France::init(const char *op) {
 
   text[0]  = 
   text[63] = 0;
-
-  pi       = 4.0 * atan(1.0);
-  deg2rad  = pi / 180.0;
 
 #if DIAGNOSTICS
   Debug_Serial = &Serial;
@@ -101,8 +121,15 @@ void ID_France::init(const char *op) {
 
   UAS_operator = (char *) op;
   
-  strncpy(ssid,op,i = sizeof(ssid)); ssid[i - 1] = 0;
+  strncpy(ssid,op,i = sizeof(ssid));
 
+  ssid[(i > 0) ? i - 1: 0] = 0;
+
+  if (uav) {
+
+    UAV_id = (char *) uav;
+  }
+  
   //
 
   WiFi.softAP(ssid,NULL,wifi_channel);
@@ -180,17 +207,28 @@ void ID_France::init(const char *op) {
   payload->L1      = sizeof(payload->version);
   payload->version = 0x01;
 
-  payload->T2      = 0x02;
-  payload->L2      = sizeof(payload->id_france);
+  payload->L2_3    = sizeof(payload->id_france);
 
-  for (i = 0; i < 3; ++i) {
+  if (*UAV_id) {
 
-    payload->id_france[i]   = manufacturer[i];
-    payload->id_france[i+3] = model[i];
+    payload->T2_3 = 0x03;
+
+    strncpy((char *) payload->id_france,UAV_id,i = sizeof(payload->id_france)); 
+    payload->id_france[i - 1] = 0;
+    
+  } else {
+
+    payload->T2_3 = 0x02;
+
+    for (i = 0; i < 3; ++i) {
+
+      payload->id_france[i]   = manufacturer[i];
+      payload->id_france[i+3] = model[i];
+    }
+
+    strncpy((char *) &payload->id_france[6],UAS_operator,(i = sizeof(payload->id_france)) - 6); 
+    payload->id_france[i - 1] = 0;
   }
-
-  strncpy((char *) &payload->id_france[6],UAS_operator,(i = sizeof(payload->id_france)) - 6); 
-  payload->id_france[i - 1] = 0;
 
   payload->T4      =  4;
   payload->L4      = sizeof(payload->latitude);
@@ -201,23 +239,19 @@ void ID_France::init(const char *op) {
 
   // An example from the specification.
 
-  lat_f  =   48.15278;
-  long_f = -179.12345;
+  lat_d  =   48.15278;
+  long_d = -179.12345;
 
-  encode_latlong(lat_f,long_f,payload->latitude,payload->longitude);
+  encode_latlong(lat_d,long_d,payload->latitude,payload->longitude);
 
   if (Debug_Serial) {
 
     char lat_s[16], long_s[16], text2[16];
 
-    dtostrf(lat_f,10,5,lat_s);
-    dtostrf(long_f,10,5,long_s);
-    dtostrf(deg2rad,9,7,text2);
+    dtostrf(lat_d,10,5,lat_s);
+    dtostrf(long_d,10,5,long_s);
 
     Debug_Serial->print("Example lat./long. encoding\r\n");
-
-    sprintf(text,"%s radians/degree\r\n",text2);
-    Debug_Serial->print(text);
 
     sprintf(text,"%s -> %02x %02x %02x %02x\r\n",lat_s,
             payload->latitude[0],payload->latitude[1],
@@ -234,11 +268,11 @@ void ID_France::init(const char *op) {
 
   // DGAC HQ, 48 50'2.57" N 2 16'17.32" E
 
-  lat_f  = 48.0 + (50.0 / 60.0) + ( 2.57 / 3600.0);
-  long_f =  2.0 + (16.0 / 60.0) + (17.32 / 3600.0);
+  lat_d  = 48.0 + (50.0 / 60.0) + ( 2.57 / 3600.0);
+  long_d =  2.0 + (16.0 / 60.0) + (17.32 / 3600.0);
 
-  encode_latlong(lat_f,long_f,payload->latitude,payload->longitude);
-  encode_latlong(lat_f,long_f,payload->base_lat,payload->base_long);
+  encode_latlong(lat_d,long_d,payload->latitude,payload->longitude);
+  encode_latlong(lat_d,long_d,payload->base_lat,payload->base_long);
 
   payload->T6          =  6;
   payload->L6          = sizeof(payload->altitude);
@@ -272,8 +306,7 @@ int ID_France::transmit(struct UTM_data *utm_data) {
 
   int                     i, length;
   char                    text[128];
-  float                   lat_f, long_f, movement = 0.0;
-  float                   sin_lat, cos_lat, a, b, radius;
+  double                  lat_d, long_d, a, b, movement = 0.0;
   uint16_t                elapsed;
   uint32_t                msecs;
   uint64_t                usecs;
@@ -291,22 +324,15 @@ int ID_France::transmit(struct UTM_data *utm_data) {
 
     char lat_s[16], long_s[16];
 
-    lat_f      = (float) utm_data->base_latitude;
-    long_f     = (float) utm_data->base_longitude;
+    lat_d      = utm_data->base_latitude;
+    long_d     = utm_data->base_longitude;
 
-    encode_latlong(lat_f,long_f,payload->base_lat,payload->base_long);
+    encode_latlong(lat_d,long_d,payload->base_lat,payload->base_long);
 
-    dtostrf(lat_f,11,6,lat_s);
-    dtostrf(long_f,11,6,long_s);
-    
-    sin_lat     = sin(lat_f * deg2rad);
-    cos_lat     = cos(lat_f * deg2rad);
-    a          = 0.08181922;
-    b           = a * sin_lat;
-    radius     = 6378137.0 * cos_lat / sqrt(1.0 - (b * b));
-    m_deg_long = deg2rad * radius;
-    m_deg_lat   = 111132.954 - (559.822 * cos(2.0 * lat_f * deg2rad)) - 
-                 (1.175 *  cos(4.0 * lat_f * deg2rad));
+    dtostrf(lat_d,11,6,lat_s);
+    dtostrf(long_d,11,6,long_s);
+
+    utm_utils.calc_m_per_deg(lat_d,&m_deg_lat,&m_deg_long);
 
     if (Debug_Serial) {
 
@@ -318,17 +344,17 @@ int ID_France::transmit(struct UTM_data *utm_data) {
       Debug_Serial->print(text);
     }
 
-    last_lat  = (float) utm_data->base_latitude;
-    last_long = (float) utm_data->base_longitude;
+    last_lat  = utm_data->base_latitude;
+    last_long = utm_data->base_longitude;
   }
 
-  lat_f      = (float) utm_data->latitude_d;
-  long_f     = (float) utm_data->longitude_d;
+  lat_d      = utm_data->latitude_d;
+  long_d     = utm_data->longitude_d;
 
   if (m_deg_lat) {
 
-    a = (lat_f  - last_lat) * m_deg_lat;
-    b = (long_f - last_long) * m_deg_long; 
+    a = (lat_d  - last_lat) * m_deg_lat;
+    b = (long_d - last_long) * m_deg_long; 
 
     movement = sqrt((a*a) + (b*b));
   }
@@ -365,7 +391,7 @@ int ID_France::transmit(struct UTM_data *utm_data) {
       usecs >>= 8;
     }
 
-    encode_latlong((float) utm_data->latitude_d,(float) utm_data->longitude_d,
+    encode_latlong(utm_data->latitude_d,utm_data->longitude_d,
                    payload->latitude,payload->longitude);
 
     conv.i16              = (int16_t) (utm_data->alt_msl_m);
@@ -396,14 +422,15 @@ int ID_France::transmit(struct UTM_data *utm_data) {
  * 
  */
 
-void ID_France::encode_latlong(float lat_f,float long_f,uint8_t *lat_u8,uint8_t *long_u8) {
+void ID_France::encode_latlong(double lat_d,double long_d,
+                               uint8_t *lat_u8,uint8_t *long_u8) {
 
   int     i;
   union {int32_t i32; uint32_t u32;} 
           latitude, longitude;
 
-  latitude.i32  = (int32_t) ( lat_f * 1.0e5);
-  longitude.i32 = (int32_t) (long_f * 1.0e5);
+  latitude.i32  = (int32_t) ( lat_d * 1.0e5);
+  longitude.i32 = (int32_t) (long_d * 1.0e5);
 
   for (i = 0; i < 4; ++i) {
 
