@@ -1,6 +1,7 @@
 /* -*- tab-width: 2; mode: c; -*-
  *
- * UTM/eID interface structure definition and some defines.
+ * UTM/eID interface structure definition, some defines and an object for 
+ * utility functions.
  *
  * Copyright (c) 2020, Steve Jack.
  *
@@ -33,7 +34,8 @@ struct UTM_parameters {
   uint8_t UA_type, ID_type, region, spare1,
           EU_category, EU_class, spare2, spare3;
   char    UTM_id[ID_SIZE * 2];
-  uint8_t spare[32];
+  char    secret[4];
+  uint8_t spare[28];
 };
 
 //
@@ -60,6 +62,32 @@ struct UTM_data {
   double base_longitude;
   float  base_alt_m;
   int    base_valid;
+  int    vel_N_cm;
+  int    vel_E_cm;
+  int    vel_D_cm;
+};
+
+/*
+ *
+ */
+
+class UTM_Utilities {
+
+ public:
+
+       UTM_Utilities(void);
+
+  void calc_m_per_deg(double,double,double *,double *);
+  void calc_m_per_deg(double,double *,double *);
+
+  int  check_EU_op_id(const char *,const char *);
+  char luhn36_check(const char *);
+  int  luhn36_c2i(char);
+  char luhn36_i2c(int);
+
+ private:
+
+  char s[20];
 };
 
 #endif
