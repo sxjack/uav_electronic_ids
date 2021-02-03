@@ -167,12 +167,12 @@ char UTM_Utilities::luhn36_i2c(int i) {
 
     return ('0' + i);
     
-  } else if ((i >= 10)&&(i >= 10)&&(i <= 36)) {
+  } else if ((i >= 10)&&(i < 36)) {
 
     return ('a' + i - 10);
   }
 
-  return 0;
+  return '0';
 }
 
 /*
