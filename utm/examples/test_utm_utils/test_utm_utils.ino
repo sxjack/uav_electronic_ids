@@ -35,7 +35,7 @@ HardwareSerial Serial3(PB11,PB10);
 
 void setup() {
 
-	int                i, j, k;
+  int                i, j, k;
   char               c, d, text[128], text2[32], text3[32];
   double             base_lat_d, base_long_d, m_deg_lat, m_deg_long;
   static const char *id  = "FIN87astrdge12k8", *secret = "xyz", *id2 = "abcd12345678xyz",
@@ -53,18 +53,18 @@ void setup() {
 
   for (i = 0; i <= 36; ++i) {
 
-		c = utm_utils.luhn36_i2c(i);
-		j = utm_utils.luhn36_c2i(c);
+    c = utm_utils.luhn36_i2c(i);
+    j = utm_utils.luhn36_c2i(c);
     k = utm_utils.luhn36_c2i(d = toupper(c));
 
-		sprintf(text,"%2d \'%c\' %2d \'%c\' %2d\r\n",i,(c) ? c: '?',j,d,k);
+    sprintf(text,"%2d \'%c\' %2d \'%c\' %2d\r\n",i,(c) ? c: '?',j,d,k);
     SerialX.print(text);
 
     delay(25);
-	}
-	
-	sprintf(text,"\r\n\'%s\' \'%s\' %d\r\n",
-					id,secret,utm_utils.check_EU_op_id(id,secret));
+  }
+  
+  sprintf(text,"\r\n\'%s\' \'%s\' %d\r\n",
+          id,secret,utm_utils.check_EU_op_id(id,secret));
   SerialX.print(text);
 
   sprintf(text,"\'%s\' \'%s\' %d\r\n",
