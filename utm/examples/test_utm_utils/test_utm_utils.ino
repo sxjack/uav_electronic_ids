@@ -91,7 +91,7 @@ void setup() {
 
   SerialX.print("\r\nLat./Long.\r\n");
 
-  utm_utils.calc_m_per_deg(base_lat_d = 54.33,base_long_d = -1.5,&m_deg_lat,&m_deg_long);
+  utm_utils.calc_m_per_deg(base_lat_d = 54.33,base_long_d = -3.0,&m_deg_lat,&m_deg_long);
 
   dtostrf(base_lat_d,10,5,text2);
   dtostrf(base_long_d,10,5,text3);
