@@ -2,7 +2,7 @@
  *
  * C++ class for Arduino to function as a wrapper around opendroneid.
  *
- * Copyright (c) 2020, Steve Jack.
+ * Copyright (c) 2020-2021, Steve Jack.
  *
  * MIT licence.
  *
@@ -13,13 +13,18 @@
 #ifndef ID_OPENDRONE_H
 #define ID_OPENDRONE_H
 
-#define ID_OD_WIFI       1
+/*
+ *  Enabling both WiFi and Bluetooth will almost certainly require a partition scheme 
+ *  with > 1.2M for the application.
+ */
+
+#define ID_OD_WIFI       0
 #define ID_OD_ASTM_BT    1        // ASTM F3411-19.
 #define ID_OD_0_64_3_BT  0        // Transmit a frame as defined in ODID specification version 0.64.3.
 
 #define BLE_SERVICES     0        // Experimental.
 
-#define ID_OD_AUTH_DATUM 1546300800L
+#define ID_OD_AUTH_DATUM 1546300800LU
 
 //
 
@@ -39,7 +44,8 @@ class ID_OpenDrone {
 public:
            ID_OpenDrone();
   void     init(struct UTM_parameters *);
-  void     set_auth(const char *);
+  void     set_auth(char *);
+  void     set_auth(uint8_t *,short int,uint8_t);
   int      transmit(struct UTM_data *);
 
 private:

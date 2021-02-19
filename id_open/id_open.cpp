@@ -2,7 +2,11 @@
  * 
  * C++ class for Arduino to function as a wrapper around opendroneid.
  *
- * Copyright (c) 2020, Steve Jack.
+ * Copyright (c) 2020-2021, Steve Jack.
+ *
+ * January 21: Modified initialisation of BasicID.
+ *             Authenication codes.
+ * 
  *
  * MIT licence.
  *
@@ -186,10 +190,19 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   basicID_data->UAType = (ODID_uatype_t) parameters->UA_type;
   basicID_data->IDType = (ODID_idtype_t) parameters->ID_type;
 
-  strncpy(basicID_data->UASID,
-          (parameters->UAV_id[0]) ? parameters->UAV_id: parameters->UAS_operator,
-          ODID_ID_SIZE);
+  switch(basicID_data->IDType) {
 
+  case ODID_IDTYPE_SERIAL_NUMBER:
+
+    strncpy(basicID_data->UASID,parameters->UAV_id,ODID_ID_SIZE);
+    break;
+
+  case ODID_IDTYPE_CAA_REGISTRATION_ID:
+
+    strncpy(basicID_data->UASID,parameters->UAS_operator,ODID_ID_SIZE);
+    break;    
+  }
+  
   basicID_data->UASID[sizeof(basicID_data->UASID) - 1] = 0;
 
   // system
@@ -299,31 +312,91 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 }
 
 /*
- *
+ *  Authentication only checked with length 16 & 100 codes.
  */
 
-void ID_OpenDrone::set_auth(const char *auth) {
+void ID_OpenDrone::set_auth(char *auth) {
 
-  int      i, l, p = 1;
+  set_auth((uint8_t *) auth,strlen(auth),0x0a);
+
+  return;
+}
+
+//
+
+void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
+
+  int      i, j, p = 1;
+  char     text[160];
+  uint8_t  check[32];
   time_t   secs;
 
   time(&secs);
 
-  l = strlen(auth);
+  if (len > MAX_AUTH_LENGTH) {
 
-  strncpy(auth_data[0]->AuthData,auth,i = 16); auth_data[0]->AuthData[i] = 0;
+    len       = MAX_AUTH_LENGTH;
+    auth[len] = 0;
+  }
+  
+  auth_data[0]->AuthType = (ODID_authtype_t) type;
 
-  if (l > 16) {
+  for (i = 0; (i < 17)&&(auth[i]); ++i) {
 
-// TODO
+    check[i]                  =
+    auth_data[0]->AuthData[i] = auth[i];
+  }
+  
+  check[i]                  = 
+  auth_data[0]->AuthData[i] = 0;
+  
+  if (Debug_Serial) {
 
-     l = 16;
+    sprintf(text,"Auth. Code \'%s\' (%d)\r\n",auth,len);
+    Debug_Serial->print(text);
+
+    sprintf(text,"Page 0 \'%s\'\r\n",check);
+    Debug_Serial->print(text);
   }
 
-  auth_data[0]->AuthType  = (ODID_authtype_t) 0x0a;
+  if (len > 16) {
+
+    for (p = 1; (p < ODID_AUTH_MAX_PAGES)&&(i < len); ++p) {
+
+      auth_data[p]->AuthType = (ODID_authtype_t) type;
+
+      for (j = 0; (j < 23)&&(i < len); ++i, ++j) {
+
+        check[j]                  = 
+        auth_data[p]->AuthData[j] = auth[i];
+      }
+
+      if (j < 23) {
+
+        auth_data[p]->AuthData[j] = 0;
+      }
+      
+      check[j] = 0;
+      
+      if (Debug_Serial) {
+
+        sprintf(text,"Page %d \'%s\'\r\n",p,check);
+        Debug_Serial->print(text);
+      }
+    }
+
+    len = i;
+  }
+
   auth_data[0]->PageCount = p;
-  auth_data[0]->Length    = l;
+  auth_data[0]->Length    = len;
   auth_data[0]->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+
+  if (Debug_Serial) {
+
+    sprintf(text,"%d pages\r\n",p);
+    Debug_Serial->print(text);
+  }
 
   return;
 }
@@ -410,8 +483,12 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     case  6:
 
-      valid_data = UAS_data.BasicIDValid    = 1;
-      transmit_ble((uint8_t *) &basicID_enc,sizeof(basicID_enc));
+      if (basicID_data->IDType) {
+        
+        valid_data = UAS_data.BasicIDValid  = 1;
+        transmit_ble((uint8_t *) &basicID_enc,sizeof(basicID_enc));
+      }
+      
       break;
 
     case 14:
