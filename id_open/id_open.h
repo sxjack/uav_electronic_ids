@@ -18,13 +18,26 @@
  *  with > 1.2M for the application.
  */
 
-#define ID_OD_WIFI       0
-#define ID_OD_ASTM_BT    1        // ASTM F3411-19.
-#define ID_OD_0_64_3_BT  0        // Transmit a frame as defined in ODID specification version 0.64.3.
+#define ID_OD_WIFI_NAN    1
+#define ID_OD_WIFI_BEACON 0        // Experimental.
+#define ID_OD_ASTM_BT     1        // ASTM F3411-19.
+#define ID_OD_0_64_3_BT   0        // Transmit a frame as defined in ODID specification version 0.64.3.
 
-#define BLE_SERVICES     0        // Experimental.
+#define BLE_SERVICES      0        // Experimental.
 
-#define ID_OD_AUTH_DATUM 1546300800LU
+#if ID_OD_WIFI_NAN || ID_OD_WIFI_BEACON
+#define ID_OD_WIFI        1
+#else
+#define ID_OD_WIFI        0
+#endif
+
+#if ID_OD_ASTM_BT || ID_OD_0_64_3_BT
+#define ID_OD_BT          1
+#else
+#define ID_OD_BT          0
+#endif
+
+#define ID_OD_AUTH_DATUM  1546300800LU
 
 //
 
@@ -61,9 +74,13 @@ private:
 #if ID_OD_WIFI
   char                    ssid[32];
   uint8_t                 WiFi_mac_addr[6], wifi_channel;
+#if ID_OD_WIFI_BEACON
+  int                     beacon_offset = 0, beacon_length = 0;
+  uint8_t                 beacon_frame[512], *beacon_payload, *beacon_timestamp; 
+#endif
 #endif
 
-#if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
+#if ID_OD_BT
   uint8_t                 ble_message[36], counter = 0;
   int                     advertising = 0;
   esp_ble_adv_data_t      advData;
