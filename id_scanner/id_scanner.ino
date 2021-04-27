@@ -3,9 +3,17 @@
  * Scanner for WiFi direct remote id. 
  * Handles both opendroneid and French formats.
  * 
- * Copyright (c) 2020, Steve Jack.
+ * Copyright (c) 2020-2021, Steve Jack.
  *
  * MIT licence.
+ * 
+ * 21/04    Added support for EN 4709-002 WiFi beacons (untested).
+ * 21/03    Added BLE scan. Doesn't work very well.
+ * 21/01    Added support for ANSI/CTA 2063 French IDs.
+ * 
+ * Notes
+ * 
+ * May need a semaphore.
  * 
  */
 
@@ -29,6 +37,8 @@
 //
 
 #define DIAGNOSTICS        1
+#define WIFI_SCAN          1
+#define BLE_SCAN           0 // Experimental
 
 #define LCD_DISPLAY       11
 #define DISPLAY_PAGE_MS 4000
@@ -41,39 +51,58 @@
 
 #define ID_SIZE     (ODID_ID_SIZE + 1)
 #define MAX_UAVS           8
+#define OP_DISPLAY_LIMIT  16
 
 //
 
-struct id_data {int      flag;
-                uint8_t  mac[6];
-                uint32_t last_seen;
-                char     op_id[ID_SIZE];
-                double   lat_d, long_d, base_lat_d, base_long_d;
-                int      altitude_msl, height_agl, speed, heading, rssi;
+#if BLE_SCAN
+
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEAddress.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+
+#endif
+
+//
+
+struct id_data {int       flag;
+                uint8_t   mac[6];
+                uint32_t  last_seen;
+                char      op_id[ID_SIZE];
+                char      uav_id[ID_SIZE];
+                double    lat_d, long_d, base_lat_d, base_long_d;
+                int       altitude_msl, height_agl, speed, heading, rssi;
 };
 
 //
 
-static void      print_json(int,int,struct id_data *);
-static esp_err_t event_handler(void *,system_event_t *);
-static void      callback(void *,wifi_promiscuous_pkt_type_t);
-static void      parse_french_id(struct id_data *,uint8_t *);
-static void      dump_frame(uint8_t *,int);
-static void      calc_m_per_deg(double,double,double *,double *);
-  
-static double           base_lat_d = 0.0, base_long_d = 0.0, m_deg_lat = 110000.0, m_deg_long = 110000.0;
+static void               print_json(int,int,struct id_data *);
+static esp_err_t          event_handler(void *,system_event_t *);
+static void               callback(void *,wifi_promiscuous_pkt_type_t);
+static struct id_data    *next_uav(uint8_t *);
+static void               parse_french_id(struct id_data *,uint8_t *);
+static void               parse_odid(struct id_data *,ODID_UAS_Data *);
+                        
+static void               dump_frame(uint8_t *,int);
+static void               calc_m_per_deg(double,double,double *,double *);
+static char              *format_op_id(char *);
 
-volatile char           ssid[10];
-volatile unsigned int   callback_counter = 0, french_wifi = 0, odid_wifi = 0;
-volatile struct id_data uavs[MAX_UAVS + 1];
+static double             base_lat_d = 0.0, base_long_d = 0.0, m_deg_lat = 110000.0, m_deg_long = 110000.0;
 
-volatile ODID_UAS_Data  UAS_data;
+volatile char             ssid[10];
+volatile unsigned int     callback_counter = 0, french_wifi = 0, odid_wifi = 0, odid_ble = 0;
+volatile struct id_data   uavs[MAX_UAVS + 1];
+
+volatile ODID_UAS_Data    UAS_data;
 
 //
 
 #if LCD_DISPLAY 
 
-static const char     *title = "ID Scanner", *build_date = __DATE__;
+static const char        *title = "RID Scanner", *build_date = __DATE__,
+                         *blank_latlong = " ---.------";
 
 #endif
 
@@ -108,13 +137,109 @@ static uint32_t  track_colours[MAX_UAVS + 1];
 
 #endif
 
+#if BLE_SCAN
+
+BLEScan *BLE_scan;
+BLEUUID  service_uuid;
+
+//
+
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+  
+    void onResult(BLEAdvertisedDevice device) {
+
+      int                   i, k, len;
+      char                  text[128];
+      uint8_t              *payload, *odid, *mac;
+      struct id_data       *UAV;
+      ODID_BasicID_data     odid_basic;
+      ODID_Location_data    odid_location;
+      ODID_System_data      odid_system;
+      ODID_OperatorID_data  odid_operator;
+
+      text[0] = i = k = 0;
+      
+      //
+      
+      if ((len = device.getPayloadLength()) > 0) {
+
+        BLEAddress ble_address = device.getAddress();
+        mac                    = (uint8_t *) ble_address.getNative();
+
+//      BLEUUID BLE_UUID = device.getServiceUUID(); // crashes program
+
+        payload = device.getPayload();
+        odid    = &payload[6];
+#if 0
+        for (i = 0, k = 0; i < ESP_BD_ADDR_LEN; ++i, k += 3) {
+
+          sprintf(&text[k],"%02x ",mac[i]);
+        }
+
+        Serial.printf("%s\r\n",text);
+
+        dump_frame(payload,payload[0]);      
+#endif
+
+        if ((payload[1] == 0x16)&&
+            (payload[2] == 0xfa)&&
+            (payload[3] == 0xff)&&
+            (payload[4] == 0x0d)){
+
+          UAV            = next_uav(mac);
+          UAV->last_seen = millis();
+          UAV->rssi      = device.getRSSI();
+          UAV->flag      = 1;
+
+          memcpy(UAV->mac,mac,6);
+
+          switch (odid[0] & 0xf0) {
+
+          case 0x00: // basic
+
+            decodeBasicIDMessage(&odid_basic,(ODID_BasicID_encoded *) odid);
+            break;
+
+          case 0x10: // location
+          
+            decodeLocationMessage(&odid_location,(ODID_Location_encoded *) odid);
+            UAV->lat_d        = odid_location.Latitude;
+            UAV->long_d       = odid_location.Longitude;
+            UAV->altitude_msl = (int) odid_location.AltitudeGeo;
+            UAV->height_agl   = (int) odid_location.Height;
+            UAV->speed        = (int) odid_location.SpeedHorizontal;
+            UAV->heading      = (int) odid_location.Direction;
+            break;
+
+          case 0x40: // system
+
+            decodeSystemMessage(&odid_system,(ODID_System_encoded *) odid);
+            UAV->base_lat_d   = odid_system.OperatorLatitude;
+            UAV->base_long_d  = odid_system.OperatorLongitude;
+            break;
+
+          case 0x50: // operator
+
+            decodeOperatorIDMessage(&odid_operator,(ODID_OperatorID_encoded *) odid);
+            strncpy((char *) UAV->op_id,(char *) odid_operator.OperatorId,ODID_ID_SIZE);
+            break;
+          }
+
+          ++odid_ble;
+        }
+      }
+
+      return;
+    }
+};
+
+#endif
+
 /*
- * 
+ *
  */
 
 void setup() {
-
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 
   //
 
@@ -130,6 +255,9 @@ void setup() {
 
   Serial.begin(115200);
 
+  Serial.printf("\r\n{ \"title\": \"%s\" }\r\n",title);
+  Serial.printf("{ \"build date\": \"%s\" }\r\n",build_date);
+
   //
 
   nvs_flash_init();
@@ -137,18 +265,37 @@ void setup() {
 
   esp_event_loop_init(event_handler,NULL);
 
+#if WIFI_SCAN
+
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+
   esp_wifi_init(&cfg);
   esp_wifi_set_storage(WIFI_STORAGE_RAM);
   esp_wifi_set_mode(WIFI_MODE_NULL);
   esp_wifi_start();
   esp_wifi_set_promiscuous(true);
-  esp_wifi_set_promiscuous_rx_cb(&callback);
+  esp_wifi_set_promiscuous_rx_cb(&callback); 
 
   // The channel should be 6.
   // If the second parameter is not WIFI_SECOND_CHAN_NONE, cast it to (wifi_second_chan_t).
-  esp_wifi_set_channel(6,WIFI_SECOND_CHAN_NONE);
+  // esp_wifi_set_channel(10,WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_channel(6,(wifi_second_chan_t) 10);
 
-  //
+#endif
+
+#if BLE_SCAN
+
+  BLEDevice::init(title);
+
+  service_uuid = BLEUUID("0000fffa-0000-1000-8000-00805f9b34fb");
+  BLE_scan     = BLEDevice::getScan();
+
+  BLE_scan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  BLE_scan->setActiveScan(true); 
+  BLE_scan->setInterval(100);
+  BLE_scan->setWindow(99);  
+
+#endif
 
 #if LCD_DISPLAY > 10
 
@@ -211,6 +358,20 @@ void setup() {
 
 #endif
 
+#if 0
+
+  int         i;
+  char        text[128];
+  const char *id[3] = {"OP-12345678901234567890", "GBR-OP-123456789012", "GBR-OP-12345678901234567890"};
+
+  for (i = 0; i < 3; ++i) {
+
+    sprintf(text,"\'%s\' -> \'%s\'\r\n",(char *) id[i],format_op_id((char *) id[i]));
+    Serial.print(text);
+  }
+
+#endif
+
   Serial.print("{ \"message\": \"setup() complete\" }\r\n");
 
   return;
@@ -222,8 +383,8 @@ void setup() {
 
 void loop() {
 
-  int             i, j;
-  char            text[128];
+  int             i, j, k, msl, agl;
+  char            text[256];
   double          x_m = 0.0, y_m = 0.0;
   uint32_t        msecs, secs;
   static int      display_uav = 0;
@@ -237,14 +398,29 @@ void loop() {
   static int      clear_y = 0;
 #endif
 
-  text[0] = 0;
+  text[0] = i = j = k = 0;
 
   //
   
   msecs = millis();
-  secs  = msecs / 1000;
 
-  //
+#if BLE_SCAN
+
+  uint32_t last_ble_scan = 0;
+
+  if ((msecs - last_ble_scan) > 2000) {
+
+    last_ble_scan = msecs;
+  
+    BLEScanResults foundDevices = BLE_scan->start(1,false);
+
+    BLE_scan->clearResults(); 
+  }
+  
+#endif
+
+  msecs = millis();
+  secs  = msecs / 1000;
 
   for (i = 0; i < MAX_UAVS; ++i) {
 
@@ -350,6 +526,9 @@ void loop() {
       last_page_change += DISPLAY_PAGE_MS;
     }
 
+    msl = uavs[display_uav].altitude_msl;
+    agl = uavs[display_uav].height_agl;
+
 #if (LCD_DISPLAY > 10) && (LCD_DISPLAY < 20) 
 
     switch (display_phase++) {
@@ -358,7 +537,7 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        sprintf(text,"%-16s",(char *) uavs[display_uav].op_id);
+        sprintf(text,"%-16s",format_op_id((char *) uavs[display_uav].op_id));
         u8x8.drawString(0,0,text);
       }
       break;
@@ -367,10 +546,28 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        sprintf(text,"%02x%02x%02x%02x%02x%02x %3d",
-                uavs[display_uav].mac[0],uavs[display_uav].mac[1],uavs[display_uav].mac[2],
-                uavs[display_uav].mac[3],uavs[display_uav].mac[4],uavs[display_uav].mac[5],
-                uavs[display_uav].rssi);
+        if (uavs[display_uav].uav_id[0]) {
+
+          for (i = 0; (i < 16)&&(uavs[display_uav].uav_id[i]); ++i) {
+
+            text[i] = uavs[display_uav].uav_id[i];
+          }
+
+          while (i < 16) {
+
+            text[i++] = ' ';
+          }
+
+          text[i] = 0;
+          
+        } else {
+
+          sprintf(text,"%02x%02x%02x%02x%02x%02x %3d",
+                  uavs[display_uav].mac[0],uavs[display_uav].mac[1],uavs[display_uav].mac[2],
+                  uavs[display_uav].mac[3],uavs[display_uav].mac[4],uavs[display_uav].mac[5],
+                  uavs[display_uav].rssi);
+        }
+
         u8x8.drawString(0,1,text);
       }
       break;
@@ -379,9 +576,26 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        dtostrf(uavs[display_uav].lat_d,12,6,text1);
-        sprintf(text,"%s %3d",text1,uavs[display_uav].altitude_msl);
-        u8x8.drawString(0,2,text);
+        if ((uavs[display_uav].lat_d >= -90.0)&&
+            (uavs[display_uav].lat_d <=  90.0)) {
+
+          dtostrf(uavs[display_uav].lat_d,11,6,text1);
+          u8x8.drawString(0,2,text1);
+          
+        } else {
+
+          u8x8.drawString(0,2,blank_latlong);
+        }
+
+        if ((msl > -1000)&&(msl < 10000)) {
+
+          sprintf(text," %4d",msl);
+          u8x8.drawString(11,2,text);
+          
+        } else {
+
+          u8x8.drawString(11,2," ----");
+        }
       }
       break;
 
@@ -389,9 +603,26 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        dtostrf(uavs[display_uav].long_d,12,6,text1);
-        sprintf(text,"%s %3d",text1,uavs[display_uav].height_agl);
-        u8x8.drawString(0,3,text);
+        if ((uavs[display_uav].long_d >= -180.0)&&
+            (uavs[display_uav].long_d <=  180.0)) {
+
+          dtostrf(uavs[display_uav].long_d,11,6,text1);
+          u8x8.drawString(0,3,text1);
+          
+        } else {
+
+          u8x8.drawString(0,3,blank_latlong);
+        }
+
+        if ((agl > -1000)&&(agl < 10000)) {
+
+          sprintf(text," %4d",agl);
+          u8x8.drawString(11,3,text);
+          
+        } else {
+
+          u8x8.drawString(11,3," ----");
+        }
       }
       break;
 
@@ -399,9 +630,26 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        dtostrf(uavs[display_uav].base_lat_d,12,6,text1);
-        sprintf(text,"%s %3d",text1,uavs[display_uav].speed);
-        u8x8.drawString(0,4,text);
+        if ((uavs[display_uav].base_lat_d >= -90.0)&&
+            (uavs[display_uav].base_lat_d <=  90.0)) {
+
+          dtostrf(uavs[display_uav].base_lat_d,11,6,text1);
+          u8x8.drawString(0,4,text1);
+          
+        } else {
+
+          u8x8.drawString(0,4,blank_latlong);
+        }
+
+        if ((uavs[display_uav].speed >= 0)&&(uavs[display_uav].speed < 10000)) {
+
+          sprintf(text," %4d",uavs[display_uav].speed);
+          u8x8.drawString(11,4,text);
+          
+        } else {
+
+          u8x8.drawString(11,4," ----");
+        }
       }
       break;
 
@@ -409,15 +657,32 @@ void loop() {
 
       if (uavs[display_uav].mac[0]) {
 
-        dtostrf(uavs[display_uav].base_long_d,12,6,text1);
-        sprintf(text,"%s %3d",text1,uavs[display_uav].heading);
-        u8x8.drawString(0,5,text);
+        if ((uavs[display_uav].base_long_d >= -180.0)&&
+            (uavs[display_uav].base_long_d <=  180.0)) {
+
+          dtostrf(uavs[display_uav].base_long_d,11,6,text1);
+          u8x8.drawString(0,5,text1);
+          
+        } else {
+
+          u8x8.drawString(0,5,blank_latlong);
+        }
+
+        if ((uavs[display_uav].heading >= 0)&&(uavs[display_uav].heading <= 360)) {
+
+          sprintf(text," %4d",uavs[display_uav].heading);
+          u8x8.drawString(11,5,text);
+          
+        } else {
+
+          u8x8.drawString(11,5," ----");
+        }
       }
       break;
 
     case 6:
 
-      sprintf(text,"%06u",odid_wifi);
+      sprintf(text,"%06u",odid_wifi + odid_ble);
       u8x8.drawString(0,6,text);
       sprintf(text,"%06u",french_wifi);
       u8x8.drawString(0,7,text);
@@ -462,7 +727,7 @@ void print_json(int index,int secs,struct id_data *UAV) {
           index,secs,
           UAV->mac[0],UAV->mac[1],UAV->mac[2],UAV->mac[3],UAV->mac[4],UAV->mac[5]);
   Serial.print(text);
-  sprintf(text,"\"operator\": \"%s\", \"uav latitude\": %s, \"uav longitude\": %s, \"alitude msl\": %d, ",
+  sprintf(text,"\"id\": \"%s\", \"uav latitude\": %s, \"uav longitude\": %s, \"alitude msl\": %d, ",
           UAV->op_id,text1,text2,UAV->altitude_msl);
   Serial.print(text);
   sprintf(text,"\"height agl\": %d, \"base latitude\": %s, \"base longitude\": %s, \"speed\": %d, \"heading\": %d }\r\n",
@@ -482,12 +747,12 @@ esp_err_t event_handler(void *ctx, system_event_t *event) {
 }
 
 /*
- *
+ * This function handles WiFi packets.
  */
 
-void callback(void* buffer, wifi_promiscuous_pkt_type_t type) {
+void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
 
-  int                     length, typ, len, i, offset;
+  int                     length, typ, len, i, j, offset;
   char                    ssid_tmp[10], *a;
   uint8_t                *packet_u8, *payload, *val;
   wifi_promiscuous_pkt_t *packet;
@@ -511,30 +776,7 @@ void callback(void* buffer, wifi_promiscuous_pkt_type_t type) {
 
 //
 
-  for (i = 0; i < MAX_UAVS; ++i) {
-
-    if (memcmp((void *) uavs[i].mac,&payload[10],6) == 0) {
-
-      UAV = (struct id_data *) &uavs[i];
-    }
-  }
-
-  if (!UAV) {
-
-    for (i = 0; i < MAX_UAVS; ++i) {
-
-      if (!uavs[i].mac[0]) {
-
-        UAV = (struct id_data *) &uavs[i];
-        break;
-      }
-    }    
-  }
-
-  if (!UAV) {
-
-     UAV = (struct id_data *) &uavs[MAX_UAVS - 1];
-  }
+  UAV = next_uav(&payload[10]);
 
   memcpy(UAV->mac,&payload[10],6);
 
@@ -551,32 +793,10 @@ void callback(void* buffer, wifi_promiscuous_pkt_type_t type) {
 
       ++odid_wifi;
 
-      if (UAS_data.OperatorIDValid) {
-
-        UAV->flag = 1;
-        strncpy((char *) UAV->op_id,(char *) UAS_data.OperatorID.OperatorId,ODID_ID_SIZE);
-      }
-
-      if (UAS_data.LocationValid) {
-
-        UAV->flag         = 1;
-        UAV->lat_d        = UAS_data.Location.Latitude;
-        UAV->long_d       = UAS_data.Location.Longitude;
-        UAV->altitude_msl = (int) UAS_data.Location.AltitudeGeo;
-        UAV->height_agl   = (int) UAS_data.Location.Height;
-        UAV->speed        = (int) UAS_data.Location.SpeedHorizontal;
-        UAV->heading      = (int) UAS_data.Location.Direction;
-      }
-
-      if (UAS_data.SystemValid) {
-
-        UAV->flag        = 1;
-        UAV->base_lat_d  = UAS_data.System.OperatorLatitude;
-        UAV->base_long_d = UAS_data.System.OperatorLongitude;
-      }
+			parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
     }
 
-  } else if (payload[0] == 0x80) { // Beacon, look for a French ID.
+  } else if (payload[0] == 0x80) { // beacon
 
     offset = 36;
 
@@ -587,13 +807,29 @@ void callback(void* buffer, wifi_promiscuous_pkt_type_t type) {
       val = &payload[offset + 2];
 
       if ((typ    == 0xdd)&&
-          (val[0] == 0x6a)&&
+          (val[0] == 0x6a)&& // French
           (val[1] == 0x5c)&&
           (val[2] == 0x35)) {
 
         ++french_wifi;
 
         parse_french_id(UAV,&payload[offset]);
+
+			} else if ((typ    == 0xdd)&&
+								 (val[0] == 0x90)&& // ODID
+								 (val[1] == 0x3a)&&
+								 (val[2] == 0xe6)) {
+
+        ++odid_wifi;
+
+        // dump_frame(payload,length);     
+
+				if ((j = offset + 5) < length) {
+					
+					odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
+
+					parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
+				}
 
       } else if ((typ == 0)&&(!ssid_tmp[0])) {
 
@@ -626,6 +862,82 @@ void callback(void* buffer, wifi_promiscuous_pkt_type_t type) {
   }
 
   return;
+}
+
+/*
+ *
+ */
+
+struct id_data *next_uav(uint8_t *mac) {
+
+  int             i;
+  struct id_data *UAV = NULL;
+
+  for (i = 0; i < MAX_UAVS; ++i) {
+
+    if (memcmp((void *) uavs[i].mac,mac,6) == 0) {
+
+      UAV = (struct id_data *) &uavs[i];
+    }
+  }
+
+  if (!UAV) {
+
+    for (i = 0; i < MAX_UAVS; ++i) {
+
+      if (!uavs[i].mac[0]) {
+
+        UAV = (struct id_data *) &uavs[i];
+        break;
+      }
+    }
+  }
+
+  if (!UAV) {
+
+     UAV = (struct id_data *) &uavs[MAX_UAVS - 1];
+  }
+
+  return UAV;
+}
+
+/*
+ *
+ */
+
+void parse_odid(struct id_data *UAV,ODID_UAS_Data *UAS_data2) {
+
+	if (UAS_data2->BasicIDValid) {
+
+		UAV->flag = 1;
+		strncpy((char *) UAV->uav_id,(char *) UAS_data2->BasicID.UASID,ODID_ID_SIZE);
+	}
+
+	if (UAS_data2->OperatorIDValid) {
+
+		UAV->flag = 1;
+		strncpy((char *) UAV->op_id,(char *) UAS_data2->OperatorID.OperatorId,ODID_ID_SIZE);
+	}
+
+	if (UAS_data2->LocationValid) {
+
+		UAV->flag         = 1;
+		UAV->lat_d        = UAS_data2->Location.Latitude;
+		UAV->long_d       = UAS_data2->Location.Longitude;
+		UAV->altitude_msl = (int) UAS_data2->Location.AltitudeGeo;
+		UAV->height_agl   = (int) UAS_data2->Location.Height;
+		UAV->speed        = (int) UAS_data2->Location.SpeedHorizontal;
+		UAV->heading      = (int) UAS_data2->Location.Direction;
+	}
+
+	if (UAS_data2->SystemValid) {
+
+		UAV->flag        = 1;
+		UAV->base_lat_d  = UAS_data2->System.OperatorLatitude;
+		UAV->base_long_d = UAS_data2->System.OperatorLongitude;
+	}	
+
+	return;
 }
 
 /*
@@ -679,6 +991,16 @@ void parse_french_id(struct id_data *UAV,uint8_t *payload) {
       }
 
       UAV->op_id[i] = 0;
+      break;
+
+    case  3:
+
+      for (i = 0; (i < l)&&(i < (ID_SIZE - 1)); ++i) {
+
+        UAV->uav_id[i] = (char) v[i];
+      }
+
+      UAV->uav_id[i] = 0;
       break;
 
     case  4:
@@ -831,3 +1153,34 @@ void calc_m_per_deg(double lat_d,double long_d,double *m_deg_lat,double *m_deg_l
 /*
  *
  */
+
+char *format_op_id(char *op_id) {
+
+  int           i, j, len;
+  char         *a, *b;
+  static char   short_id[OP_DISPLAY_LIMIT + 2];
+  const char   *_op_ = "-OP-";
+
+  strncpy(short_id,op_id,i = sizeof(short_id)); 
+  
+  short_id[OP_DISPLAY_LIMIT] = 0;
+
+  if ((len = strlen(op_id)) > OP_DISPLAY_LIMIT) {
+
+    if (a = strstr(short_id,_op_)) {
+
+      b = strstr(op_id,_op_);
+      j = strlen(a);
+
+      strncpy(a,&b[3],j);
+      short_id[OP_DISPLAY_LIMIT] = 0;
+    }
+  }
+
+  return short_id;
+}
+
+
+/*
+ *
+ */ 
