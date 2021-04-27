@@ -793,7 +793,7 @@ void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
 
       ++odid_wifi;
 
-			parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
+      parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
     }
 
   } else if (payload[0] == 0x80) { // beacon
@@ -815,21 +815,21 @@ void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
 
         parse_french_id(UAV,&payload[offset]);
 
-			} else if ((typ    == 0xdd)&&
-								 (val[0] == 0x90)&& // ODID
-								 (val[1] == 0x3a)&&
-								 (val[2] == 0xe6)) {
+      } else if ((typ    == 0xdd)&&
+                 (val[0] == 0x90)&& // ODID
+                 (val[1] == 0x3a)&&
+                 (val[2] == 0xe6)) {
 
         ++odid_wifi;
 
         // dump_frame(payload,length);     
 
-				if ((j = offset + 5) < length) {
-					
-					odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
+        if ((j = offset + 5) < length) {
+          
+          odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
 
-					parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
-				}
+          parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
+        }
 
       } else if ((typ == 0)&&(!ssid_tmp[0])) {
 
@@ -907,37 +907,37 @@ struct id_data *next_uav(uint8_t *mac) {
 
 void parse_odid(struct id_data *UAV,ODID_UAS_Data *UAS_data2) {
 
-	if (UAS_data2->BasicIDValid) {
+  if (UAS_data2->BasicIDValid) {
 
-		UAV->flag = 1;
-		strncpy((char *) UAV->uav_id,(char *) UAS_data2->BasicID.UASID,ODID_ID_SIZE);
-	}
+    UAV->flag = 1;
+    strncpy((char *) UAV->uav_id,(char *) UAS_data2->BasicID.UASID,ODID_ID_SIZE);
+  }
 
-	if (UAS_data2->OperatorIDValid) {
+  if (UAS_data2->OperatorIDValid) {
 
-		UAV->flag = 1;
-		strncpy((char *) UAV->op_id,(char *) UAS_data2->OperatorID.OperatorId,ODID_ID_SIZE);
-	}
+    UAV->flag = 1;
+    strncpy((char *) UAV->op_id,(char *) UAS_data2->OperatorID.OperatorId,ODID_ID_SIZE);
+  }
 
-	if (UAS_data2->LocationValid) {
+  if (UAS_data2->LocationValid) {
 
-		UAV->flag         = 1;
-		UAV->lat_d        = UAS_data2->Location.Latitude;
-		UAV->long_d       = UAS_data2->Location.Longitude;
-		UAV->altitude_msl = (int) UAS_data2->Location.AltitudeGeo;
-		UAV->height_agl   = (int) UAS_data2->Location.Height;
-		UAV->speed        = (int) UAS_data2->Location.SpeedHorizontal;
-		UAV->heading      = (int) UAS_data2->Location.Direction;
-	}
+    UAV->flag         = 1;
+    UAV->lat_d        = UAS_data2->Location.Latitude;
+    UAV->long_d       = UAS_data2->Location.Longitude;
+    UAV->altitude_msl = (int) UAS_data2->Location.AltitudeGeo;
+    UAV->height_agl   = (int) UAS_data2->Location.Height;
+    UAV->speed        = (int) UAS_data2->Location.SpeedHorizontal;
+    UAV->heading      = (int) UAS_data2->Location.Direction;
+  }
 
-	if (UAS_data2->SystemValid) {
+  if (UAS_data2->SystemValid) {
 
-		UAV->flag        = 1;
-		UAV->base_lat_d  = UAS_data2->System.OperatorLatitude;
-		UAV->base_long_d = UAS_data2->System.OperatorLongitude;
-	}	
+    UAV->flag        = 1;
+    UAV->base_lat_d  = UAS_data2->System.OperatorLatitude;
+    UAV->base_long_d = UAS_data2->System.OperatorLongitude;
+  }  
 
-	return;
+  return;
 }
 
 /*
