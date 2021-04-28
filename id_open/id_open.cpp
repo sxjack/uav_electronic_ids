@@ -334,8 +334,9 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     beacon_frame[beacon_offset++] = ssid[i];
   }
 
-  beacon_length     = beacon_offset + 5 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
   beacon_payload    = &beacon_frame[beacon_offset];
+  beacon_offset    += 5;
+  beacon_length     = beacon_offset + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
 
   *beacon_payload++ = 0xdd;
   *beacon_payload++ = 3 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
@@ -629,12 +630,12 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #if ID_OD_WIFI
 
+  int            length;
   esp_err_t      wifi_status;
   static uint8_t send_counter = 0;
 
 #if ID_OD_WIFI_NAN
 
-  int     length;
   char    text[128];
   uint8_t buffer[1024];
 
@@ -665,7 +666,9 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     Debug_Serial->print(text);
   }
 
-#elif ID_OD_WIFI_BEACON
+#endif
+  
+#if ID_OD_WIFI_BEACON
 
   int      i;
   uint64_t usecs;
@@ -679,10 +682,11 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
   
-  odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE));
+  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE))) > 0) {
   
-  wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_length,true);
-  
+    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
+  }
+
 #endif
   
 #endif

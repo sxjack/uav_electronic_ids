@@ -41,7 +41,7 @@
 
 //
 
-#if ID_OD_ASTM_BT | ID_OD_0_64_3_BT
+#if ID_OD_BT
 #include "BLEDevice.h"
 #include "BLEUtils.h"
 #endif
