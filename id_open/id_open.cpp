@@ -41,7 +41,7 @@
  * 
  */
      
-#define DIAGNOSTICS   1
+#define DIAGNOSTICS   0
 #define PARROT_BEACON 1
 
 //
@@ -90,7 +90,7 @@ ID_OpenDrone::ID_OpenDrone() {
 
 #if ID_OD_WIFI_BEACON
 
-	// If ODID_PACK_MAX_MESSAGES == 10, then the potential size of the beacon message is > 255.
+  // If ODID_PACK_MAX_MESSAGES == 10, then the potential size of the beacon message is > 255.
   
 #if ODID_PACK_MAX_MESSAGES > 9
 #undef ODID_PACK_MAX_MESSAGES
@@ -689,7 +689,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   
 #if ID_OD_WIFI_BEACON
 
-  int      i;
+  int      i, len2 = 0;
   uint64_t usecs;
 
   ++*beacon_counter;
@@ -705,8 +705,29 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
     *beacon_length = length + 7;
     
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
+    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,len2 = beacon_offset + length,true);
   }
+
+#if DIAGNOSTICS && 1
+
+  char text[128];
+
+  if (Debug_Serial) {
+
+    sprintf(text,"%s %d,%d,%d ",
+            __func__,beacon_offset,length,len2);
+    Debug_Serial->print(text);  
+
+    for (int i = 0; i < 16; ++i) {
+
+      sprintf(text,"%02x ",beacon_frame[beacon_offset - 10 + i]);
+      Debug_Serial->print(text);
+    }
+
+    Debug_Serial->print("\r\n");
+  }
+
+#endif
 
 #endif
   
