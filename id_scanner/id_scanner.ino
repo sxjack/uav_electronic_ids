@@ -43,7 +43,7 @@
 #define LCD_DISPLAY       11
 #define DISPLAY_PAGE_MS 4000
 
-#define TFT_DISPLAY        1
+#define TFT_DISPLAY        0
 #define TFT_WIDTH        128
 #define TFT_HEIGHT       160
 #define TRACK_SCALE      1.0 // m/pixel
@@ -815,16 +815,15 @@ void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
 
         parse_french_id(UAV,&payload[offset]);
 
-      } else if ((typ    == 0xdd)&&
-                 (val[0] == 0x90)&& // ODID
-                 (val[1] == 0x3a)&&
-                 (val[2] == 0xe6)) {
+      } else if ((typ      == 0xdd)&&
+                 (((val[0] == 0x90)&&(val[1] == 0x3a)&&(val[2] == 0xe6))|| // Parrot
+                  ((val[0] == 0xfa)&&(val[1] == 0x0b)&&(val[2] == 0xbc)))) { // ODID
 
         ++odid_wifi;
 
         // dump_frame(payload,length);     
 
-        if ((j = offset + 5) < length) {
+        if ((j = offset + 7) < length) {
           
           odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
 
