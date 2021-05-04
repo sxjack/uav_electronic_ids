@@ -75,8 +75,8 @@ private:
   char                    ssid[32];
   uint8_t                 WiFi_mac_addr[6], wifi_channel;
 #if ID_OD_WIFI_BEACON
-  int                     beacon_offset = 0, beacon_length = 0;
-  uint8_t                 beacon_frame[512], *beacon_payload, *beacon_timestamp; 
+  int                     beacon_offset = 0;
+  uint8_t                 beacon_frame[512], *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length; 
 #endif
 #endif
 

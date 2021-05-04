@@ -41,7 +41,8 @@
  * 
  */
      
-#define DIAGNOSTICS 1
+#define DIAGNOSTICS   1
+#define PARROT_BEACON 1
 
 //
 
@@ -95,7 +96,9 @@ ID_OpenDrone::ID_OpenDrone() {
 
   memset(beacon_frame,0,sizeof(beacon_frame));
 
-  beacon_timestamp = 
+  beacon_counter   =
+  beacon_length    =
+  beacon_timestamp =
   beacon_payload   = beacon_frame;
 
 #endif
@@ -334,15 +337,24 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     beacon_frame[beacon_offset++] = ssid[i];
   }
 
-  beacon_payload    = &beacon_frame[beacon_offset];
-  beacon_offset    += 5;
-  beacon_length     = beacon_offset + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
+  beacon_payload      = &beacon_frame[beacon_offset];
+  beacon_offset      += 7;
 
-  *beacon_payload++ = 0xdd;
-  *beacon_payload++ = 3 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
-  *beacon_payload++ = 0x90;
-  *beacon_payload++ = 0x3a;
-  *beacon_payload++ = 0xe6;
+  *beacon_payload++   = 0xdd;
+  beacon_length       = beacon_payload++;
+
+#if PARROT_BEACON
+  *beacon_payload++   = 0x90;
+  *beacon_payload++   = 0x3a;
+  *beacon_payload++   = 0xe6;
+#else
+  *beacon_payload++   = 0xfa;
+  *beacon_payload++   = 0x0b;
+  *beacon_payload++   = 0xbc;
+#endif
+
+  *beacon_payload++   = 0x0d;
+  beacon_counter      = beacon_payload++;
   
 #endif
 
@@ -632,12 +644,12 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
   int            length;
   esp_err_t      wifi_status;
-  static uint8_t send_counter = 0;
 
 #if ID_OD_WIFI_NAN
 
-  char    text[128];
-  uint8_t buffer[1024];
+  char           text[128];
+  uint8_t        buffer[1024];
+  static uint8_t send_counter = 0;
 
   if ((length = odid_wifi_build_nan_sync_beacon_frame((char *) WiFi_mac_addr,
                                                       buffer,sizeof(buffer))) > 0) {
@@ -673,7 +685,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   int      i;
   uint64_t usecs;
 
-  ++send_counter;
+  ++*beacon_counter;
   
   usecs = micros();
 
@@ -683,7 +695,9 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   }
   
   if ((length = odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE))) > 0) {
-  
+
+    *beacon_length = length + 7;
+    
     wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
   }
 
