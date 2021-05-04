@@ -15,7 +15,7 @@
  *
  * Wifi
  * 
- * Needs testing against a known good app. 
+ * Needs testing against a known good app.
  * 
  * BLE
  * 
@@ -90,9 +90,16 @@ ID_OpenDrone::ID_OpenDrone() {
 
 #if ID_OD_WIFI_BEACON
 
-#if (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE) > 250 
-#error "Packed ODID data too big."
+	// If ODID_PACK_MAX_MESSAGES == 10, then the potential size of the beacon message is > 255.
+  
+#if ODID_PACK_MAX_MESSAGES > 9
+#undef ODID_PACK_MAX_MESSAGES
+#define ODID_PACK_MAX_MESSAGES 9
 #endif
+  
+  // #if (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE) > 248 
+  // #error "Packed ODID data too big."
+  // #endif
 
   memset(beacon_frame,0,sizeof(beacon_frame));
 
