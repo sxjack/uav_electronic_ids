@@ -362,6 +362,13 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   *beacon_payload++   = 0x0d;
   beacon_counter      = beacon_payload++;
+
+  beacon_max_packed   = BEACON_FRAME_SIZE - beacon_offset - 2;
+
+  if (beacon_max_packed > (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE)) {
+
+    beacon_max_packed = (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
+  }
   
 #endif
 
@@ -701,7 +708,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
   
-  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE))) > 0) {
+  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
 
     *beacon_length = length + 7;
     
@@ -714,17 +721,26 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
   if (Debug_Serial) {
 
-    sprintf(text,"%s %d,%d,%d ",
-            __func__,beacon_offset,length,len2);
-    Debug_Serial->print(text);  
+    sprintf(text,"ID_OpenDrone::%s %d %d+%d=%d ",
+            __func__,beacon_max_packed,beacon_offset,length,len2);
+    Debug_Serial->print(text);
+
+    sprintf(text,"* %02x ... ",beacon_frame[0]);
+    Debug_Serial->print(text);
 
     for (int i = 0; i < 16; ++i) {
+
+      if ((i == 3)||(i == 10)) {
+
+        Debug_Serial->print("| ");
+      }
 
       sprintf(text,"%02x ",beacon_frame[beacon_offset - 10 + i]);
       Debug_Serial->print(text);
     }
 
-    Debug_Serial->print("\r\n");
+    sprintf(text,"... %02x\r\n",beacon_frame[len2 - 1]);
+    Debug_Serial->print(text);
   }
 
 #endif

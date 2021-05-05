@@ -31,6 +31,8 @@
 #define ID_OD_WIFI        0
 #endif
 
+#define BEACON_FRAME_SIZE 256
+
 #if ID_OD_ASTM_BT || ID_OD_0_64_3_BT
 #define ID_OD_BT          1
 #else
@@ -75,8 +77,9 @@ private:
   char                    ssid[32];
   uint8_t                 WiFi_mac_addr[6], wifi_channel;
 #if ID_OD_WIFI_BEACON
-  int                     beacon_offset = 0;
-  uint8_t                 beacon_frame[512], *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length; 
+  int                     beacon_offset = 0, beacon_max_packed = 30;
+  uint8_t                 beacon_frame[BEACON_FRAME_SIZE],
+                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length; 
 #endif
 #endif
 
