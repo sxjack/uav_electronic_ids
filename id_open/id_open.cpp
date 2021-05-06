@@ -41,8 +41,7 @@
  * 
  */
      
-#define DIAGNOSTICS   0
-#define PARROT_BEACON 1
+#define DIAGNOSTICS   1
 
 //
 
@@ -350,15 +349,9 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   *beacon_payload++   = 0xdd;
   beacon_length       = beacon_payload++;
 
-#if PARROT_BEACON
-  *beacon_payload++   = 0x90;
-  *beacon_payload++   = 0x3a;
-  *beacon_payload++   = 0xe6;
-#else
   *beacon_payload++   = 0xfa;
   *beacon_payload++   = 0x0b;
   *beacon_payload++   = 0xbc;
-#endif
 
   *beacon_payload++   = 0x0d;
   beacon_counter      = beacon_payload++;
