@@ -41,7 +41,7 @@
  * 
  */
      
-#define DIAGNOSTICS   1
+#define DIAGNOSTICS 1
 
 //
 
@@ -96,10 +96,6 @@ ID_OpenDrone::ID_OpenDrone() {
 #define ODID_PACK_MAX_MESSAGES 9
 #endif
   
-  // #if (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE) > 248 
-  // #error "Packed ODID data too big."
-  // #endif
-
   memset(beacon_frame,0,sizeof(beacon_frame));
 
   beacon_counter   =
@@ -703,7 +699,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   
   if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
 
-    *beacon_length = length + 7;
+    *beacon_length = length + 5;
     
     wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,len2 = beacon_offset + length,true);
   }
