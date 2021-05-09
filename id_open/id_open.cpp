@@ -41,7 +41,7 @@
  * 
  */
      
-#define DIAGNOSTICS 1
+#define DIAGNOSTICS 0
 
 //
 
@@ -86,6 +86,8 @@ ID_OpenDrone::ID_OpenDrone() {
 
   memset(WiFi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
+
+  strcpy(ssid,"UAS_ID_OPEN");
 
 #if ID_OD_WIFI_BEACON
 
@@ -260,7 +262,11 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   int8_t         wifi_power;
   wifi_config_t  wifi_config;
 
-  strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
+  if (UAS_operator[0]) {
+
+    strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
+  }
+
   WiFi.softAP(ssid,NULL,wifi_channel);
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
