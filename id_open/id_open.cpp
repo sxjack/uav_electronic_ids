@@ -154,8 +154,9 @@ ID_OpenDrone::ID_OpenDrone() {
     auth_data[i]->AuthType = ODID_AUTH_NONE; // 0
   }
 
-  basicID_data->IDType              = ODID_IDTYPE_NONE; // 0
-  basicID_data->UAType              = ODID_UATYPE_NONE; // 0
+  basicID_data->IDType              = ODID_IDTYPE_SERIAL_NUMBER; // 0
+  basicID_data->UAType              = ODID_UATYPE_HELICOPTER_OR_MULTIROTOR ; // 0
+  strcpy(basicID_data->UASID,"MFG1A0123456789");
 
   odid_initLocationData(location_data);
 
@@ -634,7 +635,11 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   //
 
   if (valid_data) {
-
+  UAS_data.BasicIDValid    =
+  UAS_data.LocationValid   =
+  UAS_data.SelfIDValid     =
+  UAS_data.SystemValid     =
+  UAS_data.OperatorIDValid = 1;
 #if ID_OD_WIFI
     status = transmit_wifi(utm_data);
 #endif
