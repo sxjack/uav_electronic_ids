@@ -15,7 +15,7 @@
  *
  * Wifi
  * 
- * Needs testing against a known good app. 
+ * Needs testing against a known good app.
  * 
  * BLE
  * 
@@ -41,7 +41,7 @@
  * 
  */
      
-#define DIAGNOSTICS 1
+#define DIAGNOSTICS 0
 
 //
 
@@ -87,15 +87,22 @@ ID_OpenDrone::ID_OpenDrone() {
   memset(WiFi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
 
+  strcpy(ssid,"UAS_ID_OPEN");
+
 #if ID_OD_WIFI_BEACON
 
-#if (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE) > 250 
-#error "Packed ODID data too big."
+  // If ODID_PACK_MAX_MESSAGES == 10, then the potential size of the beacon message is > 255.
+  
+#if ODID_PACK_MAX_MESSAGES > 9
+#undef ODID_PACK_MAX_MESSAGES
+#define ODID_PACK_MAX_MESSAGES 9
 #endif
-
+  
   memset(beacon_frame,0,sizeof(beacon_frame));
 
-  beacon_timestamp = 
+  beacon_counter   =
+  beacon_length    =
+  beacon_timestamp =
   beacon_payload   = beacon_frame;
 
 #endif
@@ -255,7 +262,11 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   int8_t         wifi_power;
   wifi_config_t  wifi_config;
 
-  strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
+  if (UAS_operator[0]) {
+
+    strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
+  }
+
   WiFi.softAP(ssid,NULL,wifi_channel);
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
@@ -334,15 +345,25 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     beacon_frame[beacon_offset++] = ssid[i];
   }
 
-  beacon_payload    = &beacon_frame[beacon_offset];
-  beacon_offset    += 5;
-  beacon_length     = beacon_offset + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
+  beacon_payload      = &beacon_frame[beacon_offset];
+  beacon_offset      += 7;
 
-  *beacon_payload++ = 0xdd;
-  *beacon_payload++ = 3 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
-  *beacon_payload++ = 0x90;
-  *beacon_payload++ = 0x3a;
-  *beacon_payload++ = 0xe6;
+  *beacon_payload++   = 0xdd;
+  beacon_length       = beacon_payload++;
+
+  *beacon_payload++   = 0xfa;
+  *beacon_payload++   = 0x0b;
+  *beacon_payload++   = 0xbc;
+
+  *beacon_payload++   = 0x0d;
+  beacon_counter      = beacon_payload++;
+
+  beacon_max_packed   = BEACON_FRAME_SIZE - beacon_offset - 2;
+
+  if (beacon_max_packed > (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE)) {
+
+    beacon_max_packed = (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
+  }
   
 #endif
 
@@ -632,12 +653,12 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
   int            length;
   esp_err_t      wifi_status;
-  static uint8_t send_counter = 0;
 
 #if ID_OD_WIFI_NAN
 
-  char    text[128];
-  uint8_t buffer[1024];
+  char           text[128];
+  uint8_t        buffer[1024];
+  static uint8_t send_counter = 0;
 
   if ((length = odid_wifi_build_nan_sync_beacon_frame((char *) WiFi_mac_addr,
                                                       buffer,sizeof(buffer))) > 0) {
@@ -670,10 +691,10 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   
 #if ID_OD_WIFI_BEACON
 
-  int      i;
+  int      i, len2 = 0;
   uint64_t usecs;
 
-  ++send_counter;
+  ++*beacon_counter;
   
   usecs = micros();
 
@@ -682,10 +703,42 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
   
-  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE))) > 0) {
-  
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
+  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
+
+    *beacon_length = length + 5;
+    
+    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,len2 = beacon_offset + length,true);
   }
+
+#if DIAGNOSTICS && 1
+
+  char text[128];
+
+  if (Debug_Serial) {
+
+    sprintf(text,"ID_OpenDrone::%s %d %d+%d=%d ",
+            __func__,beacon_max_packed,beacon_offset,length,len2);
+    Debug_Serial->print(text);
+
+    sprintf(text,"* %02x ... ",beacon_frame[0]);
+    Debug_Serial->print(text);
+
+    for (int i = 0; i < 16; ++i) {
+
+      if ((i == 3)||(i == 10)) {
+
+        Debug_Serial->print("| ");
+      }
+
+      sprintf(text,"%02x ",beacon_frame[beacon_offset - 10 + i]);
+      Debug_Serial->print(text);
+    }
+
+    sprintf(text,"... %02x\r\n",beacon_frame[len2 - 1]);
+    Debug_Serial->print(text);
+  }
+
+#endif
 
 #endif
   

@@ -15,6 +15,8 @@ static struct UTM_data       utm_data;
 
 void setup() {
 
+  Serial.begin(115200);
+
   memset(&utm_parameters,0,sizeof(utm_parameters));
 
   strcpy(utm_parameters.UAS_operator,"FIN-OP-1234567");

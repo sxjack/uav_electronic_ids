@@ -18,8 +18,8 @@
  *  with > 1.2M for the application.
  */
 
-#define ID_OD_WIFI_NAN    1
-#define ID_OD_WIFI_BEACON 0        // Experimental.
+#define ID_OD_WIFI_NAN    0
+#define ID_OD_WIFI_BEACON 1        // Experimental.
 #define ID_OD_ASTM_BT     1        // ASTM F3411-19.
 #define ID_OD_0_64_3_BT   0        // Transmit a frame as defined in ODID specification version 0.64.3.
 
@@ -30,6 +30,8 @@
 #else
 #define ID_OD_WIFI        0
 #endif
+
+#define BEACON_FRAME_SIZE 256
 
 #if ID_OD_ASTM_BT || ID_OD_0_64_3_BT
 #define ID_OD_BT          1
@@ -75,8 +77,9 @@ private:
   char                    ssid[32];
   uint8_t                 WiFi_mac_addr[6], wifi_channel;
 #if ID_OD_WIFI_BEACON
-  int                     beacon_offset = 0, beacon_length = 0;
-  uint8_t                 beacon_frame[512], *beacon_payload, *beacon_timestamp; 
+  int                     beacon_offset = 0, beacon_max_packed = 30;
+  uint8_t                 beacon_frame[BEACON_FRAME_SIZE],
+                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length; 
 #endif
 #endif
 
