@@ -260,7 +260,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
   
-  wifi_config.ap.ssid_hidden = 0;
+  wifi_config.ap.ssid_hidden = 1;
   
   status = esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
 
@@ -339,13 +339,10 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   beacon_length     = beacon_offset + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
 
   *beacon_payload++ = 0xdd;
-//  *beacon_payload++ = 3 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);  // This should be actual number of messages within payload rather than max
-  *beacon_payload++ = 7 + 3 + (1*ODID_MESSAGE_SIZE); // Temporary workaround.  (added +7 for: 0xdd,len, oid[3], appid, counter)
-  *beacon_payload++ = 0x90; // OUI (3 bytes)
+  *beacon_payload++ = 3 + (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
+  *beacon_payload++ = 0x90;
   *beacon_payload++ = 0x3a;
   *beacon_payload++ = 0xe6;
-  *beacon_payload++ = 0x0d; // App ID (Open Drone ID = 0d)
-  *beacon_payload++ = 0x00; // Counter -- need to increment somewhere.
   
 #endif
 
@@ -686,10 +683,8 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   }
   
   if ((length = odid_message_build_pack(&UAS_data,beacon_payload,(ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE))) > 0) {
-    //wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
-    // Temp workaround because the length wasn't matching what was being sent -- wireshark is detecting as "malformed"
-    // need to change to dynamicall size based on actual message len (not max possible).
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset+32,true);
+  
+    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,beacon_offset + length,true);
   }
 
 #endif
@@ -747,7 +742,7 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
 
   advertising = 1;
 
-#if DIAGNOSTICS
+#if DIAGNOSTICS && 0
 
   char       text[64], text2[34];
   static int first = 1;
