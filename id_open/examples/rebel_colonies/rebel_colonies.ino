@@ -15,6 +15,8 @@ static struct UTM_data       utm_data;
 
 void setup() {
 
+  const char *auth = "I love the FAA and think that Remote ID is great. Honest.";
+
   Serial.begin(115200);
 
   memset(&utm_parameters,0,sizeof(utm_parameters));
@@ -27,6 +29,8 @@ void setup() {
   strcpy(utm_parameters.UAV_id,"MFR1L123456789ABC");
   
   squitter.init(&utm_parameters);
+  
+  squitter.set_auth((char *) auth);
   
   memset(&utm_data,0,sizeof(utm_data));
 
