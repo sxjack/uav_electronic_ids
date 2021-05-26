@@ -137,7 +137,9 @@ ID_OpenDrone::ID_OpenDrone() {
 #endif // 0.64.3 | ASTM
 
   //
-
+  // Below '// 0' indicates where we are setting 0 to 0 for clarity.
+  //
+  
   memset(&UAS_data,0,sizeof(ODID_UAS_Data));
 
   basicID_data    = &UAS_data.BasicID;
@@ -501,7 +503,8 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
 
 int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
-  int                     i, status, valid_data;
+  int                     i, status,
+                          valid_data, wifi_tx_flag_1, wifi_tx_flag_2;
   char                    text[128];
   uint32_t                msecs;
   static int              phase = 0;
@@ -525,6 +528,9 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   //
 
   valid_data               =
+  wifi_tx_flag_1           =
+  wifi_tx_flag_2           = 0;
+
   UAS_data.BasicIDValid    =
   UAS_data.LocationValid   =
   UAS_data.SelfIDValid     =
@@ -545,6 +551,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
     case  4: case  8: case 12: // Every 300 ms.
     case 16: case 20: case 24:
     case 28: case 32: case 36:
+
+      wifi_tx_flag_1 = 1;
 
       if (utm_data->satellites >= SATS_LEVEL_2) {
 
@@ -587,7 +595,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     case 14:
 
-      valid_data = UAS_data.SelfIDValid     = 1;
+      wifi_tx_flag_2 = valid_data =
+      UAS_data.SelfIDValid        = 1;
       transmit_ble((uint8_t *) &selfID_enc,sizeof(selfID_enc));
       break;
 
@@ -633,14 +642,53 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
   //
 
+#if ID_OD_WIFI
+
+#if 0
+
+  // Don't pack the WiFi data, send one message at a time.
+
   if (valid_data) {
 
-#if ID_OD_WIFI
     status = transmit_wifi(utm_data);
-#endif
   }
 
-  return status;
+#else
+
+  // Pack the WiFi data.
+  // One group every 300ms and another every 3000ms.
+  
+  if (wifi_tx_flag_1) { // IDs and locations.
+
+    UAS_data.SystemValid = 1;
+
+    if (UAS_data.BasicID.UASID[0]) {
+
+      UAS_data.BasicIDValid = 1;
+    }
+
+    if (UAS_data.OperatorID.OperatorId[0]) {
+
+      UAS_data.OperatorIDValid = 1;
+    }
+
+    status = transmit_wifi(utm_data);
+
+  } else if (wifi_tx_flag_2) { // SelfID and authentication.
+
+    for (i = 0; (i < UAS_data.Auth[0].PageCount)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
+
+      UAS_data.AuthValid[i] = 1;
+    }
+      
+    status = transmit_wifi(utm_data);
+  }
+
+#endif // Pack data
+
+#endif // ID_OD_WIFI
+
+return status;
 }
 
 /*

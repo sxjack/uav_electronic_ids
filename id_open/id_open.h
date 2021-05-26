@@ -19,7 +19,7 @@
  */
 
 #define ID_OD_WIFI_NAN    0
-#define ID_OD_WIFI_BEACON 1        // Experimental.
+#define ID_OD_WIFI_BEACON 1
 #define ID_OD_ASTM_BT     1        // ASTM F3411-19.
 #define ID_OD_0_64_3_BT   0        // Transmit a frame as defined in ODID specification version 0.64.3.
 
