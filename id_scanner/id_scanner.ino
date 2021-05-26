@@ -7,7 +7,8 @@
  *
  * MIT licence.
  * 
- * 21/04    Added support for EN 4709-002 WiFi beacons (untested).
+ * 21/05    Fixed a bug that presented when handing packed ODID data from multiple sources. 
+ * 21/04    Added support for EN 4709-002 WiFi beacons.
  * 21/03    Added BLE scan. Doesn't work very well.
  * 21/01    Added support for ANSI/CTA 2063 French IDs.
  * 
@@ -824,6 +825,8 @@ void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
         // dump_frame(payload,length);     
 
         if ((j = offset + 7) < length) {
+
+          memset((void *) &UAS_data,0,sizeof(UAS_data));
           
           odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
 
