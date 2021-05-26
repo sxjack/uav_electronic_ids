@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2020-2021, Steve Jack.
  *
+ * May '21:     Packed WiFi.
+ *
  * April '21:   Added support for beacon frames (untested). 
  *              Minor tidying up.
  *
