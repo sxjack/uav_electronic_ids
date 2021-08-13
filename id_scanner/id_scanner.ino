@@ -7,11 +7,12 @@
  *
  * MIT licence.
  * 
- * 21/05    Fixed a bug that presented when handing packed ODID data from multiple sources. 
- * 21/04    Added support for EN 4709-002 WiFi beacons.
- * 21/03    Added BLE scan. Doesn't work very well.
- * 21/01    Added support for ANSI/CTA 2063 French IDs.
- * 
+ * June '21     Added an option to log to an SD card.
+ * May '21      Fixed a bug that presented when handing packed ODID data from multiple sources. 
+ * April '21    Added support for EN 4709-002 WiFi beacons.
+ * March '21    Added BLE scan. Doesn't work very well.
+ * January '21  Added support for ANSI/CTA 2063 French IDs.
+ *
  * Notes
  * 
  * May need a semaphore.
@@ -38,8 +39,13 @@
 //
 
 #define DIAGNOSTICS        1
+
 #define WIFI_SCAN          1
 #define BLE_SCAN           0 // Experimental
+
+#define SD_LOGGER          1
+#define SD_CS              5
+#define SD_LOGGER_LED      2
 
 #define LCD_DISPLAY       11
 #define DISPLAY_PAGE_MS 4000
@@ -53,6 +59,17 @@
 #define ID_SIZE     (ODID_ID_SIZE + 1)
 #define MAX_UAVS           8
 #define OP_DISPLAY_LIMIT  16
+
+//
+
+#if SD_LOGGER
+
+#include <SD.h>
+// #include <SdFat.h>
+
+// #define SD_CONFIG       SdSpiConfig(SD_CS,DEDICATED_SPI,SD_SCK_MHZ(16))
+
+#endif
 
 //
 
@@ -77,9 +94,17 @@ struct id_data {int       flag;
                 int       altitude_msl, height_agl, speed, heading, rssi;
 };
 
+#if SD_LOGGER
+struct id_log  {int8_t    flushed;
+                uint32_t  last_write;
+                File      sd_log;
+};
+#endif
+
 //
 
 static void               print_json(int,int,struct id_data *);
+static void               write_log(uint32_t,struct id_data *,struct id_log *);
 static esp_err_t          event_handler(void *,system_event_t *);
 static void               callback(void *,wifi_promiscuous_pkt_type_t);
 static struct id_data    *next_uav(uint8_t *);
@@ -91,6 +116,9 @@ static void               calc_m_per_deg(double,double,double *,double *);
 static char              *format_op_id(char *);
 
 static double             base_lat_d = 0.0, base_long_d = 0.0, m_deg_lat = 110000.0, m_deg_long = 110000.0;
+#if SD_LOGGER
+static struct id_log      logfiles[MAX_UAVS + 1];
+#endif
 
 volatile char             ssid[10];
 volatile unsigned int     callback_counter = 0, french_wifi = 0, odid_wifi = 0, odid_ble = 0;
@@ -125,8 +153,8 @@ U8X8_SSD1306_128X64_NONAME_HW_I2C u8x8(U8X8_PIN_NONE);
 
 #if TFT_DISPLAY
 
-// For this library, the chip and pins are defined in User_Setup.h
-// which is pretty horrible.
+// For this library, the chip and pins are defined in User_Setup.h.
+// Which is pretty horrible.
 
 #include <TFT_eSPI.h>
 #include <SPI.h>
@@ -242,6 +270,11 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 
 void setup() {
 
+  int         i;
+  char        text[128];
+
+  text[0] = i = 0;
+
   //
 
   memset((void *) &UAS_data,0,sizeof(ODID_UAS_Data));
@@ -249,6 +282,16 @@ void setup() {
   memset((void *) ssid,0,10);
 
   strcpy((char *) uavs[MAX_UAVS].op_id,"NONE");
+
+#if SD_LOGGER
+
+  for (i = 0; i <= MAX_UAVS; ++i) {
+
+    logfiles[i].flushed    = 1; 
+    logfiles[i].last_write = 0;
+  }
+
+#endif
 
   //
 
@@ -361,14 +404,37 @@ void setup() {
 
 #if 0
 
-  int         i;
-  char        text[128];
   const char *id[3] = {"OP-12345678901234567890", "GBR-OP-123456789012", "GBR-OP-12345678901234567890"};
 
   for (i = 0; i < 3; ++i) {
 
     sprintf(text,"\'%s\' -> \'%s\'\r\n",(char *) id[i],format_op_id((char *) id[i]));
     Serial.print(text);
+  }
+
+#endif
+
+#if SD_LOGGER
+
+  File root, file;
+
+  pinMode(SD_LOGGER_LED,OUTPUT);
+  digitalWrite(SD_LOGGER_LED,0);
+
+  if (SD.begin(SD_CS)) {
+
+    if (root = SD.open("/")) {
+
+      while (file = root.openNextFile()) {
+
+        sprintf(text,"{ \"file\": \"%s\", \"size\": %u }\r\n",file.name(),file.size());
+        Serial.print(text);
+        
+        file.close();
+      }
+
+      root.close();
+    }
   }
 
 #endif
@@ -430,11 +496,23 @@ void loop() {
 
       uavs[i].last_seen = 0;
       uavs[i].mac[0]    = 0;
+
+#if SD_LOGGER
+      if (logfiles[i].sd_log) {
+
+        logfiles[i].sd_log.close();
+        logfiles[i].flushed = 1;
+      }
+#endif
     }
 
     if (uavs[i].flag) {
 
       print_json(i,secs,(id_data *) &uavs[i]);
+
+#if SD_LOGGER
+      write_log(msecs,(id_data *) &uavs[i],&logfiles[i]);
+#endif
 
       if ((uavs[i].lat_d)&&(uavs[i].base_lat_d)) {
 
@@ -470,6 +548,24 @@ void loop() {
 
       last_json = msecs;
     }
+
+#if SD_LOGGER
+
+    if ((logfiles[i].sd_log)&&
+        (!logfiles[i].flushed)&&
+        ((msecs - logfiles[i].last_write) > 10000)) {
+
+      digitalWrite(SD_LOGGER_LED,1);
+
+      logfiles[i].sd_log.flush();
+      logfiles[i].flushed = 1;
+
+      logfiles[i].last_write = msecs;
+
+      digitalWrite(SD_LOGGER_LED,0);
+    }  
+
+#endif
   }
 
 #if TFT_DISPLAY
@@ -738,6 +834,60 @@ void print_json(int index,int secs,struct id_data *UAV) {
   return;
 }
 
+
+/*
+ *
+ */
+
+void write_log(uint32_t msecs,struct id_data *UAV,struct id_log *logfile) {
+
+#if SD_LOGGER
+
+  int       secs, dsecs;
+  char      text[128], filename[24], text1[16], text2[16];
+
+  secs  = (int) (msecs / 1000);
+  dsecs = ((short int) (msecs - (secs * 1000))) / 100;
+
+  //
+
+  if (!logfile->sd_log) {
+
+    sprintf(filename,"/%02X%02X%02X%02X.TSV",
+            UAV->mac[2],UAV->mac[3],UAV->mac[4],UAV->mac[5]);
+
+    if (!(logfile->sd_log = SD.open(filename,FILE_APPEND))) {
+
+      sprintf(text,"{ \"message\": \"Unable to open \'%s\'\" }\r\n",filename);
+      Serial.print(text);
+    }
+  }
+
+  //
+
+  if (logfile->sd_log) {
+
+    dtostrf(UAV->lat_d,11,6,text1);
+    dtostrf(UAV->long_d,11,6,text2);
+
+    sprintf(text,"%d.%d\t%s\t%s\t%s\t%s\t",
+            secs,dsecs,UAV->op_id,UAV->uav_id,text1,text2);
+    logfile->sd_log.print(text);
+
+    sprintf(text,"%d\t%d\t%d\t",
+            (int) UAV->altitude_msl,(int) UAV->speed,
+            (int) UAV->heading);
+    logfile->sd_log.print(text);
+
+    logfile->sd_log.print("\r\n");
+    logfile->flushed = 0;
+  }
+  
+#endif
+
+  return;
+}
+
 /*
  *
  */
@@ -955,7 +1105,8 @@ void parse_french_id(struct id_data *UAV,uint8_t *payload) {
   union {int16_t i16; uint16_t u16;} 
                  alt, height;
 
-  uav_lat.u32   = 
+  uav_lat.u32  
+  = 
   uav_long.u32  = 
   base_lat.u32  =
   base_long.u32 = 0;
