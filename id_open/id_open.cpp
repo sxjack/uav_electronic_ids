@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2020-2021, Steve Jack.
  *
+ * Oct. '21:    Updated for opendroneid release 1.0.
+ *
  * May '21:     Packed WiFi.
  *
  * April '21:   Added support for beacon frames (untested). 
@@ -144,7 +146,7 @@ ID_OpenDrone::ID_OpenDrone() {
   
   memset(&UAS_data,0,sizeof(ODID_UAS_Data));
 
-  basicID_data    = &UAS_data.BasicID;
+  basicID_data    = &UAS_data.BasicID[0];
   location_data   = &UAS_data.Location;
   selfID_data     = &UAS_data.SelfID;
   system_data     = &UAS_data.System;
@@ -166,8 +168,8 @@ ID_OpenDrone::ID_OpenDrone() {
   location_data->Status             = ODID_STATUS_UNDECLARED; // 0
   location_data->SpeedVertical      = INV_SPEED_V;
   location_data->HeightType         = ODID_HEIGHT_REF_OVER_TAKEOFF;
-  location_data->HorizAccuracy      = ODID_HOR_ACC_30_METER;
-  location_data->VertAccuracy       = ODID_VER_ACC_25_METER;
+  location_data->HorizAccuracy      = ODID_HOR_ACC_10_METER;
+  location_data->VertAccuracy       = ODID_VER_ACC_10_METER;
   location_data->BaroAccuracy       = ODID_VER_ACC_10_METER;
   location_data->SpeedAccuracy      = ODID_SPEED_ACC_10_METERS_PER_SECOND;
   location_data->TSAccuracy         = ODID_TIME_ACC_1_0_SECOND;
@@ -181,8 +183,11 @@ ID_OpenDrone::ID_OpenDrone() {
   system_data->ClassificationType   = ODID_CLASSIFICATION_TYPE_EU;
   system_data->AreaCount            = 1;
   system_data->AreaRadius           = 500;
+  system_data->AreaCeiling          =
+  system_data->AreaFloor            = -1000.0;
   system_data->CategoryEU           = ODID_CATEGORY_EU_SPECIFIC;
   system_data->ClassEU              = ODID_CLASS_EU_UNDECLARED;
+  system_data->OperatorAltitudeGeo  = -1000.0;
 
   operatorID_data->OperatorIdType   = ODID_OPERATOR_ID;
 
@@ -410,7 +415,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 }
 
 /*
- *  Authentication only checked with length 16 & 100 codes.
+ *  These authentication functions need reviewing to make sure that they 
+ *  comply with opendroneid release 1.0.
  */
 
 void ID_OpenDrone::set_auth(char *auth) {
@@ -424,10 +430,12 @@ void ID_OpenDrone::set_auth(char *auth) {
 
 void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
 
-  int      i, j, p = 1;
+  int      i, j;
   char     text[160];
   uint8_t  check[32];
   time_t   secs;
+
+  auth_page_count = 1;
 
   time(&secs);
 
@@ -459,26 +467,26 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
 
   if (len > 16) {
 
-    for (p = 1; (p < ODID_AUTH_MAX_PAGES)&&(i < len); ++p) {
+    for (auth_page_count = 1; (auth_page_count < ODID_AUTH_MAX_PAGES)&&(i < len); ++auth_page_count) {
 
-      auth_data[p]->AuthType = (ODID_authtype_t) type;
+      auth_data[auth_page_count]->AuthType = (ODID_authtype_t) type;
 
       for (j = 0; (j < 23)&&(i < len); ++i, ++j) {
 
-        check[j]                  = 
-        auth_data[p]->AuthData[j] = auth[i];
+        check[j]                                = 
+        auth_data[auth_page_count]->AuthData[j] = auth[i];
       }
 
       if (j < 23) {
 
-        auth_data[p]->AuthData[j] = 0;
+        auth_data[auth_page_count]->AuthData[j] = 0;
       }
       
       check[j] = 0;
       
       if (Debug_Serial) {
 
-        sprintf(text,"Page %d \'%s\'\r\n",p,check);
+        sprintf(text,"Page %d \'%s\'\r\n",auth_page_count,check);
         Debug_Serial->print(text);
       }
     }
@@ -486,13 +494,13 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
     len = i;
   }
 
-  auth_data[0]->PageCount = p;
-  auth_data[0]->Length    = len;
-  auth_data[0]->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+  auth_data[0]->LastPageIndex = (auth_page_count) ? auth_page_count - 1: 0;
+  auth_data[0]->Length        = len;
+  auth_data[0]->Timestamp     = (uint32_t) (secs - ID_OD_AUTH_DATUM);
 
   if (Debug_Serial) {
 
-    sprintf(text,"%d pages\r\n",p);
+    sprintf(text,"%d pages\r\n",auth_page_count);
     Debug_Serial->print(text);
   }
 
@@ -521,9 +529,10 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
   if ((!system_data->OperatorLatitude)&&(utm_data->base_valid)) {
 
-    system_data->OperatorLatitude  = utm_data->base_latitude;
-    system_data->OperatorLongitude = utm_data->base_longitude;
-
+    system_data->OperatorLatitude    = utm_data->base_latitude;
+    system_data->OperatorLongitude   = utm_data->base_longitude;
+    system_data->OperatorAltitudeGeo = utm_data->base_alt_m;
+ 
     encodeSystemMessage(&system_enc,system_data);
   }
 
@@ -533,7 +542,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   wifi_tx_flag_1           =
   wifi_tx_flag_2           = 0;
 
-  UAS_data.BasicIDValid    =
+  UAS_data.BasicIDValid[0] =
   UAS_data.LocationValid   =
   UAS_data.SelfIDValid     =
   UAS_data.SystemValid     =
@@ -589,7 +598,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       if (basicID_data->IDType) {
         
-        valid_data = UAS_data.BasicIDValid  = 1;
+        valid_data = UAS_data.BasicIDValid[0] = 1;
         transmit_ble((uint8_t *) &basicID_enc,sizeof(basicID_enc));
       }
       
@@ -616,14 +625,14 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     case 38:
 
-      if (auth_data[0]->PageCount) {
+      if (auth_page_count) {
 
         encodeAuthMessage(&auth_enc,auth_data[auth_page]);
         valid_data = UAS_data.AuthValid[auth_page] = 1;
 
         transmit_ble((uint8_t *) &auth_enc,sizeof(auth_enc));
 
-        if (++auth_page >= auth_data[0]->PageCount) {
+        if (++auth_page >= auth_page_count) {
 
           auth_page = 0;
         }
@@ -664,9 +673,9 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     UAS_data.SystemValid = 1;
 
-    if (UAS_data.BasicID.UASID[0]) {
+    if (UAS_data.BasicID[0].UASID[0]) {
 
-      UAS_data.BasicIDValid = 1;
+      UAS_data.BasicIDValid[0] = 1;
     }
 
     if (UAS_data.OperatorID.OperatorId[0]) {
@@ -678,7 +687,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
   } else if (wifi_tx_flag_2) { // SelfID and authentication.
 
-    for (i = 0; (i < UAS_data.Auth[0].PageCount)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
+    for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
 
       UAS_data.AuthValid[i] = 1;
     }

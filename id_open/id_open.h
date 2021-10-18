@@ -68,7 +68,7 @@ private:
   int      transmit_wifi(struct UTM_data *);
   int      transmit_ble(uint8_t *,int);
 
-  int                     auth_page = 0;
+  int                     auth_page = 0, auth_page_count = 0;
   char                   *UAS_operator;
   int16_t                 phase = 0;
   Stream                 *Debug_Serial = NULL;
