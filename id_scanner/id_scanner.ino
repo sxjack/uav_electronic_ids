@@ -7,6 +7,7 @@
  *
  * MIT licence.
  * 
+ * Oct. '21     Updated for opendroneid release 1.0.
  * June '21     Added an option to log to an SD card.
  * May '21      Fixed a bug that presented when handing packed ODID data from multiple sources. 
  * April '21    Added support for EN 4709-002 WiFi beacons.
@@ -41,7 +42,7 @@
 #define DIAGNOSTICS        1
 
 #define WIFI_SCAN          1
-#define BLE_SCAN           0 // Experimental
+#define BLE_SCAN           0 // Experimental, does work very well.
 
 #define SD_LOGGER          1
 #define SD_CS              5
@@ -1059,10 +1060,10 @@ struct id_data *next_uav(uint8_t *mac) {
 
 void parse_odid(struct id_data *UAV,ODID_UAS_Data *UAS_data2) {
 
-  if (UAS_data2->BasicIDValid) {
+  if (UAS_data2->BasicIDValid[0]) {
 
     UAV->flag = 1;
-    strncpy((char *) UAV->uav_id,(char *) UAS_data2->BasicID.UASID,ODID_ID_SIZE);
+    strncpy((char *) UAV->uav_id,(char *) UAS_data2->BasicID[0].UASID,ODID_ID_SIZE);
   }
 
   if (UAS_data2->OperatorIDValid) {
