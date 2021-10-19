@@ -140,6 +140,8 @@ ID_OpenDrone::ID_OpenDrone() {
 
 #endif // 0.64.3 | ASTM
 
+  memset(msg_counter,0,sizeof(msg_counter));
+  
   //
   // Below '// 0' indicates where we are setting 0 to 0 for clarity.
   //
@@ -842,7 +844,11 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
 #endif
   ble_message[j++] = 0x0d;
 
+#if 0
   ble_message[j++] = ++counter;
+#else
+  ble_message[j++] = ++msg_counter[odid_msg[0] >> 4];
+#endif
 
   for (i = 0; (i < length)&&(j < sizeof(ble_message)); ++i, ++j) {
 

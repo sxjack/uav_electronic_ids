@@ -70,6 +70,7 @@ private:
 
   int                     auth_page = 0, auth_page_count = 0;
   char                   *UAS_operator;
+  uint8_t                 msg_counter[16];
   int16_t                 phase = 0;
   Stream                 *Debug_Serial = NULL;
 
