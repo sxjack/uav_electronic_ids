@@ -323,8 +323,9 @@ void setup() {
 
   // The channel should be 6.
   // If the second parameter is not WIFI_SECOND_CHAN_NONE, cast it to (wifi_second_chan_t).
-  // esp_wifi_set_channel(10,WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_channel(6,(wifi_second_chan_t) 10);
+  // There has been a report of the ESP not scanning the first channel if the second is set.
+  
+  esp_wifi_set_channel(6,WIFI_SECOND_CHAN_NONE);
 
 #endif
 
