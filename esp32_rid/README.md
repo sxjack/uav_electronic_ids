@@ -1,5 +1,3 @@
-# DO NOT USE. AWAITING TESTING.
-
 # ESP32 Direct Remote ID 
 
 ## Bill of Material
@@ -13,12 +11,13 @@ A link to one that I have used is below.
 
 ## Tools
 
-* esptool. It is probably easiest to install the Arduino IDE and the ESP32 hardware library.
+* esptool. It is probably easiest to install the Arduino IDE and the ESP32 boards.
 
 ## Build
 
 * Program the ESP32 with the bin file using its USB port.
 * Connect a 5V supply to VIN (optional).
+I would avoid powering via USB and VIN at the same time. There should be a diode...
 * Connect the GPS module to TX2 & RX2.
 
 ## Configuration
