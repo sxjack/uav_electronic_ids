@@ -8,7 +8,7 @@ Developed and tested with SH1106 128x64 OLED and ST7735 160x128 TFT displays.
 The U8g2 library was used to drive the SH1106. 
 The TFT_eSPI library was used to drive the ST7735.
 
-Requires opendroneid.c, opendroneid.h and odid_wifi.h from https://github.com/opendroneid. A modified version of wifi.c is used.
+Requires opendroneid.c, opendroneid.h, odid_wifi.h and wifi.c from https://github.com/opendroneid.
 
 * Libraries
   * https://github.com/olikraus/u8g2
