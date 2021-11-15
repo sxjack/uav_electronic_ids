@@ -7,6 +7,7 @@
  *
  * MIT licence.
  * 
+ * Nov. '21     Added option to dump ODID frame to serial output.
  * Oct. '21     Updated for opendroneid release 1.0.
  * June '21     Added an option to log to an SD card.
  * May '21      Fixed a bug that presented when handing packed ODID data from multiple sources. 
@@ -40,15 +41,16 @@
 //
 
 #define DIAGNOSTICS        1
+#define DUMP_ODID_FRAME    0
 
 #define WIFI_SCAN          1
 #define BLE_SCAN           0 // Experimental, does work very well.
 
-#define SD_LOGGER          1
+#define SD_LOGGER          0
 #define SD_CS              5
 #define SD_LOGGER_LED      2
 
-#define LCD_DISPLAY       11
+#define LCD_DISPLAY        0 // 11 for a SH1106 128X64 OLED.
 #define DISPLAY_PAGE_MS 4000
 
 #define TFT_DISPLAY        0
@@ -129,12 +131,8 @@ volatile ODID_UAS_Data    UAS_data;
 
 //
 
-#if LCD_DISPLAY 
-
 static const char        *title = "RID Scanner", *build_date = __DATE__,
                          *blank_latlong = " ---.------";
-
-#endif
 
 #if (LCD_DISPLAY > 10) && (LCD_DISPLAY < 20) 
 
@@ -369,6 +367,8 @@ void setup() {
   u8x8.drawString( 0,6,"ODID    heap");
   u8x8.drawString( 0,7,"French  stack");
 
+#else
+  blank_latlong;
 #endif
 
 #if TFT_DISPLAY
@@ -974,14 +974,15 @@ void callback(void* buffer,wifi_promiscuous_pkt_type_t type) {
 
         ++odid_wifi;
 
-        // dump_frame(payload,length);     
-
         if ((j = offset + 7) < length) {
 
           memset((void *) &UAS_data,0,sizeof(UAS_data));
           
           odid_message_process_pack((ODID_UAS_Data *) &UAS_data,&payload[j],length - j);
 
+#if DUMP_ODID_FRAME
+          dump_frame(payload,length);     
+#endif
           parse_odid(UAV,(ODID_UAS_Data *) &UAS_data);
         }
 
