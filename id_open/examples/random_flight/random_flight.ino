@@ -1,11 +1,13 @@
-/*
+/* -*- tab-width: 2; mode: c; -*-
  * 
- * 
+ * A random wander around the BMFA's Buckminster flying centre.
  * 
  */
 
 #include <Arduino.h>
 #include <math.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include <id_open.h>
 
@@ -20,16 +22,40 @@ static double deg2rad = 0.0, m_deg_lat = 0.0, m_deg_long = 0.0;
 
 void setup() {
 
-  char   text[64];
-  double sin_lat, cos_lat, a, b, radius, lat_d, long_d;
-
+  char            text[64];
+  double          sin_lat, cos_lat, a, b, radius, lat_d, long_d;
+  time_t          time_2;
+  struct tm       clock_tm;
+  struct timeval  tv = {0,0};
+  struct timezone utc = {0,0};
+  
   //
 
   Serial.begin(115200);
 
+  //
+
+  memset(&clock_tm,0,sizeof(struct tm));
+
+  clock_tm.tm_hour  =  13;
+  clock_tm.tm_mday  =   3;
+  clock_tm.tm_mon   =   7;
+  clock_tm.tm_year  = 121;
+
+  tv.tv_sec =
+  time_2    = mktime(&clock_tm);
+  
+  settimeofday(&tv,&utc);
+
+  delay(500);
+
+  Serial.print(ctime(&time_2));
+  
+  //
+
   memset(&utm_parameters,0,sizeof(utm_parameters));
 
-  strcpy(utm_parameters.UAS_operator,"GBR-OP-123ABCD");
+  strcpy(utm_parameters.UAS_operator,"GBR-OP-1234ABCDEFGH");
 
   utm_parameters.region      = 1;
   utm_parameters.EU_category = 1;
