@@ -4,6 +4,9 @@
  *
  * Copyright (c) 2020-2021, Steve Jack.
  *
+ * Nov. '21:    Removed some redundant code. 
+ *              Added option to use the new odid_wifi_build_message_pack_beacon_frame() function.
+ * 
  * Oct. '21:    Updated for opendroneid release 1.0.
  *
  * May '21:     Packed WiFi.
@@ -17,9 +20,17 @@
  *
  * MIT licence.
  *
- * Wifi
+ * NOTES
+ *
+ * Features
+ *
+ * esp_wifi_80211_tx() seems to zero the WiFi timestamp in addition to setting the sequence.
+ * (The timestamp is set in ID_OpenDrone::transmit_wifi(), but WireShark says that it is zero.)
+ *
+ * Validation
  * 
- * Needs testing against a known good app.
+ * Beacon works with the opendroneid app on my Moto G7.
+ * Bluetooth 4 works well with the opendroneid app on my G7.
  * 
  * BLE
  * 
@@ -86,7 +97,7 @@ ID_OpenDrone::ID_OpenDrone() {
 
 #if ID_OD_WIFI
 
-  wifi_channel = 6;
+  wifi_channel = WIFI_CHANNEL;
 
   memset(WiFi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
@@ -102,12 +113,16 @@ ID_OpenDrone::ID_OpenDrone() {
 #define ODID_PACK_MAX_MESSAGES 9
 #endif
   
-  memset(beacon_frame,0,sizeof(beacon_frame));
+  memset(beacon_frame,0,BEACON_FRAME_SIZE);
+
+#if !USE_BEACON_FUNC
 
   beacon_counter   =
   beacon_length    =
   beacon_timestamp =
   beacon_payload   = beacon_frame;
+
+#endif
 
 #endif
 
@@ -138,7 +153,7 @@ ID_OpenDrone::ID_OpenDrone() {
 
   service_uuid = BLEUUID("0000fffa-0000-1000-8000-00805f9b34fb");
 
-#endif // 0.64.3 | ASTM
+#endif // ID_OD_BT
 
   memset(msg_counter,0,sizeof(msg_counter));
   
@@ -278,6 +293,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
   }
 
+  ssid_length = strlen(ssid);
+  
   WiFi.softAP(ssid,NULL,wifi_channel);
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
@@ -311,7 +328,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     Debug_Serial->print(text);
   }
 
-#if ID_OD_WIFI_BEACON
+#if ID_OD_WIFI_BEACON && !USE_BEACON_FUNC
 
   struct __attribute__((__packed__)) beacon_header {
 
@@ -333,8 +350,12 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   header->control[0]      = 0x80;
   header->interval[0]     = 0xb8;
   header->interval[1]     = 0x0b;
-  header->capability[0]   = 0x21;
-  header->capability[1]   = 0x04;
+#if 1
+  header->capability[0]   = 0x20; // Short preamble
+#else
+  header->capability[0]   = 0x21; // ESS | Short preamble
+#endif
+  header->capability[1]   = 0x04; // Short slot time
   header->ds_parameter[0] = 0x03;
   header->ds_parameter[1] = 0x01;
   header->ds_parameter[2] = wifi_channel;
@@ -349,7 +370,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   beacon_offset = sizeof(struct beacon_header);
 
   beacon_frame[beacon_offset++] = 0;
-  beacon_frame[beacon_offset++] = strlen(ssid);
+  beacon_frame[beacon_offset++] = ssid_length;
 
   for (i = 0; (i < 32)&&(ssid[i]); ++i) {
 
@@ -748,22 +769,56 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     Debug_Serial->print(text);
   }
 
-#endif
+#endif // NAN
   
 #if ID_OD_WIFI_BEACON
 
+#if USE_BEACON_FUNC
+
+  ++beacon_counter;
+  
+  if ((length = odid_wifi_build_message_pack_beacon_frame(&UAS_data,(char *) WiFi_mac_addr,
+                                                          ssid,ssid_length,
+                                                          3000,++beacon_counter,
+                                                          beacon_frame,BEACON_FRAME_SIZE)) > 0) {
+
+    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,length,true);
+  }
+
+#if DIAGNOSTICS && 1
+
+  if (Debug_Serial) {
+
+    char text[128];
+
+    sprintf(text,"ID_OpenDrone::%s * %02x ... ",__func__,beacon_frame[0]);
+    Debug_Serial->print(text);
+
+    for (int i = 0; i < 20; ++i) {
+
+      sprintf(text,"%02x ",beacon_frame[22 + i]);
+      Debug_Serial->print(text);      
+    }
+
+    Debug_Serial->print(" ... *\r\n");
+  }
+
+#endif // DIAG
+
+#else
+  
   int      i, len2 = 0;
   uint64_t usecs;
 
   ++*beacon_counter;
-  
+
   usecs = micros();
 
   for (i = 0; i < 8; ++i) {
 
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
-  
+
   if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
 
     *beacon_length = length + 5;
@@ -799,11 +854,13 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     Debug_Serial->print(text);
   }
 
-#endif
+#endif // DIAG
 
-#endif
+#endif // FUNC
   
-#endif
+#endif // BEACON
+
+#endif // WIFI
 
   return 0;
 }
@@ -833,15 +890,9 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
   }
 
   ble_message[j++] = 0x1e;
-#if ID_OD_ASTM_BT
   ble_message[j++] = 0x16;
   ble_message[j++] = 0xfa; // ASTM
   ble_message[j++] = 0xff; //
-#else
-  ble_message[j++] = 0xff;
-  ble_message[j++] = 0x02; // Intel
-  ble_message[j++] = 0x00; //
-#endif
   ble_message[j++] = 0x0d;
 
 #if 0

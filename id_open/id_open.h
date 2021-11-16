@@ -20,9 +20,7 @@
 
 #define ID_OD_WIFI_NAN    0
 #define ID_OD_WIFI_BEACON 1
-#define ID_OD_ASTM_BT     1        // ASTM F3411-19.
-#define ID_OD_0_64_3_BT   0        // Transmit a frame as defined in ODID specification version 0.64.3.
-
+#define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
 #define BLE_SERVICES      0        // Experimental.
 
 #if ID_OD_WIFI_NAN || ID_OD_WIFI_BEACON
@@ -31,13 +29,9 @@
 #define ID_OD_WIFI        0
 #endif
 
+#define USE_BEACON_FUNC   1        //
+#define WIFI_CHANNEL      6        // Be carefull changing this.
 #define BEACON_FRAME_SIZE 256
-
-#if ID_OD_ASTM_BT || ID_OD_0_64_3_BT
-#define ID_OD_BT          1
-#else
-#define ID_OD_BT          0
-#endif
 
 #define ID_OD_AUTH_DATUM  1546300800LU
 
@@ -71,16 +65,20 @@ private:
   int                     auth_page = 0, auth_page_count = 0;
   char                   *UAS_operator;
   uint8_t                 msg_counter[16];
-  int16_t                 phase = 0;
   Stream                 *Debug_Serial = NULL;
 
 #if ID_OD_WIFI
   char                    ssid[32];
   uint8_t                 WiFi_mac_addr[6], wifi_channel;
+  size_t                  ssid_length = 0;
 #if ID_OD_WIFI_BEACON
   int                     beacon_offset = 0, beacon_max_packed = 30;
   uint8_t                 beacon_frame[BEACON_FRAME_SIZE],
-                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length; 
+#if USE_BEACON_FUNC
+                          beacon_counter = 0;
+#else
+                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length;
+#endif
 #endif
 #endif
 
