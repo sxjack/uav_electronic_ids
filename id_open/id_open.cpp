@@ -775,8 +775,6 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #if USE_BEACON_FUNC
 
-  ++beacon_counter;
-  
   if ((length = odid_wifi_build_message_pack_beacon_frame(&UAS_data,(char *) WiFi_mac_addr,
                                                           ssid,ssid_length,
                                                           3000,++beacon_counter,
