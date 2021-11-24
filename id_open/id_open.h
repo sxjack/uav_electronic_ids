@@ -35,11 +35,6 @@
 
 #define ID_OD_AUTH_DATUM  1546300800LU
 
-#if PARROT_BEACON
-#undef USE_BEACON_FUNC
-#define USE_BEACON_FUNC   0
-#endif
-
 //
 
 #if ID_OD_BT
