@@ -18,8 +18,8 @@
  *  with > 1.2M for the application.
  */
 
-#define ID_OD_WIFI_NAN    0
-#define ID_OD_WIFI_BEACON 1
+#define ID_OD_WIFI_NAN    1
+#define ID_OD_WIFI_BEACON 0
 #define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
 #define BLE_SERVICES      0        // Experimental.
 
@@ -29,11 +29,16 @@
 #define ID_OD_WIFI        0
 #endif
 
-#define USE_BEACON_FUNC   1        //
+#define USE_BEACON_FUNC   0
 #define WIFI_CHANNEL      6        // Be carefull changing this.
 #define BEACON_FRAME_SIZE 256
 
 #define ID_OD_AUTH_DATUM  1546300800LU
+
+#if PARROT_BEACON
+#undef USE_BEACON_FUNC
+#define USE_BEACON_FUNC   0
+#endif
 
 //
 

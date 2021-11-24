@@ -300,7 +300,6 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
   
   wifi_config.ap.ssid_hidden = 1;
-  
   status = esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
 
   // esp_wifi_set_country();
@@ -341,7 +340,6 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     uint8_t timestamp[8];        // 24-31: 
     uint8_t interval[2];         //
     uint8_t capability[2];
-    uint8_t ds_parameter[3];     // : ds parameters
   } *header;
 
   header                  = (struct beacon_header *) beacon_frame;
@@ -350,15 +348,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   header->control[0]      = 0x80;
   header->interval[0]     = 0xb8;
   header->interval[1]     = 0x0b;
-#if 1
-  header->capability[0]   = 0x20; // Short preamble
-#else
   header->capability[0]   = 0x21; // ESS | Short preamble
-#endif
   header->capability[1]   = 0x04; // Short slot time
-  header->ds_parameter[0] = 0x03;
-  header->ds_parameter[1] = 0x01;
-  header->ds_parameter[2] = wifi_channel;
 
   for (i = 0; i < 6; ++i) {
 
@@ -377,6 +368,30 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     beacon_frame[beacon_offset++] = ssid[i];
   }
 
+// Supported rates
+#if 1
+  beacon_frame[beacon_offset++] = 0x01; // This is what ODID 1.0 does.
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x8c; // 11b, 6(B) Mbit/sec
+#elif 0
+  beacon_frame[beacon_offset++] = 0x01; // This is what the ESP32's beacon frames do. Jams GPS?
+  beacon_frame[beacon_offset++] = 0x08;
+  beacon_frame[beacon_offset++] = 0x8b; //  5.5
+  beacon_frame[beacon_offset++] = 0x96; // 11
+  beacon_frame[beacon_offset++] = 0x82; //  1
+  beacon_frame[beacon_offset++] = 0x84; //  2
+  beacon_frame[beacon_offset++] = 0x0c; //  6, note not 0x8c
+  beacon_frame[beacon_offset++] = 0x18; // 12 
+  beacon_frame[beacon_offset++] = 0x30; // 24
+  beacon_frame[beacon_offset++] = 0x60; // 48
+#endif
+
+  // DS
+  beacon_frame[beacon_offset++] = 0x03;
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = wifi_channel;
+  
+  // payload
   beacon_payload      = &beacon_frame[beacon_offset];
   beacon_offset      += 7;
 
