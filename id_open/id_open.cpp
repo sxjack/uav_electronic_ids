@@ -2,7 +2,9 @@
  * 
  * C++ class for Arduino to function as a wrapper around opendroneid.
  *
- * Copyright (c) 2020-2021, Steve Jack.
+ * Copyright (c) 2020-2022, Steve Jack.
+ *
+ * May '22:     opendroneid 2.0.
  *
  * Nov. '21:    Removed some redundant code. 
  *              Added option to use the new odid_wifi_build_message_pack_beacon_frame() function.
@@ -555,6 +557,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
                           valid_data, wifi_tx_flag_1, wifi_tx_flag_2;
   char                    text[128];
   uint32_t                msecs;
+  time_t                  secs;
   static int              phase = 0;
   static uint32_t         last_msecs = 0;
 
@@ -563,6 +566,10 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   text[0] = 0;
   msecs   = millis();
 
+	// For the ODID 2.0 timestamp.
+	// Does having a timestamp in system data mean that we should transmit it more often?
+  time(&secs);
+
   // 
 
   if ((!system_data->OperatorLatitude)&&(utm_data->base_valid)) {
@@ -570,7 +577,9 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
     system_data->OperatorLatitude    = utm_data->base_latitude;
     system_data->OperatorLongitude   = utm_data->base_longitude;
     system_data->OperatorAltitudeGeo = utm_data->base_alt_m;
- 
+
+    system_data->Timestamp           = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+
     encodeSystemMessage(&system_enc,system_data);
   }
 
@@ -651,7 +660,11 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     case 22:
 
-      valid_data = UAS_data.SystemValid     = 1;
+      valid_data = UAS_data.SystemValid = 1;
+#if 1
+			system_data->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+      encodeSystemMessage(&system_enc,system_data);
+#endif
       transmit_ble((uint8_t *) &system_enc,sizeof(system_enc));
       break;
 
