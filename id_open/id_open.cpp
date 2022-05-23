@@ -566,8 +566,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   text[0] = 0;
   msecs   = millis();
 
-	// For the ODID 2.0 timestamp.
-	// Does having a timestamp in system data mean that we should transmit it more often?
+  // For the ODID 2.0 timestamp.
+  // Does having a timestamp in system data mean that we should transmit it more often?
   time(&secs);
 
   // 
@@ -662,8 +662,11 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       valid_data = UAS_data.SystemValid = 1;
 #if 1
-			system_data->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
-      encodeSystemMessage(&system_enc,system_data);
+      if (secs > ID_OD_AUTH_DATUM) {
+
+        system_data->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+        encodeSystemMessage(&system_enc,system_data);
+      }
 #endif
       transmit_ble((uint8_t *) &system_enc,sizeof(system_enc));
       break;
