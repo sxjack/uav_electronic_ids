@@ -223,6 +223,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   char text[128];
 
   status  = 0;
+  (void)status; // might be unused depending on the #defines
   text[0] = text[63] = 0;
 
 #if DIAGNOSTICS
@@ -251,7 +252,19 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   case ODID_IDTYPE_CAA_REGISTRATION_ID:
 
     strncpy(basicID_data->UASID,parameters->UAS_operator,ODID_ID_SIZE);
-    break;    
+    break;   
+
+  case ODID_IDTYPE_NONE:
+
+    break;
+
+  case ODID_IDTYPE_UTM_ASSIGNED_UUID:
+
+    break;
+
+  case ODID_IDTYPE_SPECIFIC_SESSION_ID:
+
+    break;
   }
   
   basicID_data->UASID[sizeof(basicID_data->UASID) - 1] = 0;
@@ -447,6 +460,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   ble_service_dbm->start();
 
+# else
+ (void)(power_db);// unused warning
 #endif
 
 #endif
@@ -561,7 +576,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   static int              phase = 0;
   static uint32_t         last_msecs = 0;
 
-  //
+  status = 0;
+  (void)status;// might be unused depending on the #defines
 
   text[0] = 0;
   msecs   = millis();
@@ -905,10 +921,10 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
   int         i, j, k, len;
   uint8_t    *a;
   esp_err_t   status;
-
+  (void)status;// might be unused depending on the #defines
   i = j = k = len = 0;
   a = ble_message;
-
+  (void)a; // might be unused depending on the #defines
   memset(ble_message,0,sizeof(ble_message));
 
   //
