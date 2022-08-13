@@ -9,4 +9,7 @@ Needs opendroneid.c, opendroneid.h, odid_wifi.h and wifi.c from [opendroneid](ht
 
 Last tested with opendroneid release 1.0. Unlikely to see further development.
 
-If you are thinking of using this to make remote IDs for use in the US or EU, there is a problem. It looks like both of these jurisdictions are going to require IDs to transmit ANSI/CTA serial numbers. (See the table at the bottom of [this page](https://github.com/opendroneid/opendroneid-core-c/).)
+If you are thinking of using this to make remote IDs for use in the US or EU, there are problems.
+  * It looks like both of these jurisdictions are going to require IDs to transmit ANSI/CTA serial numbers. (See the table at the bottom of [this page](https://github.com/opendroneid/opendroneid-core-c/).)
+  * The FAA are requiring remote IDs to be tamper resistant (see their [acceptance of the ASTM Means of Compliance](https://www.federalregister.gov/documents/2022/08/11/2022-16997/accepted-means-of-compliance-remote-identification-of-unmanned-aircraft) ). I don't see how this can be done with an open source, home built ID.
+
