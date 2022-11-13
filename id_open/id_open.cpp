@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2020-2022, Steve Jack.
  *
+ * Nov. '22:    Moved the processor specific code to a separate file.
+ *
  * May '22:     opendroneid 2.0.
  *
  * Nov. '21:    Removed some redundant code. 
@@ -24,37 +26,6 @@
  *
  * NOTES
  *
- * Features
- *
- * esp_wifi_80211_tx() seems to zero the WiFi timestamp in addition to setting the sequence.
- * (The timestamp is set in ID_OpenDrone::transmit_wifi(), but WireShark says that it is zero.)
- *
- * Validation
- * 
- * Beacon works with the opendroneid app on my Moto G7.
- * Bluetooth 4 works well with the opendroneid app on my G7.
- * 
- * BLE
- * 
- * A case of fighting the API to get it to do what I want.
- * For certain things, it is easier to bypass the 'user friendly' Arduino API and
- * use the esp_ functions.
- * 
- * Reference 
- * 
- * https://github.com/opendroneid/receiver-android/issues/7
- * 
- * From the Android app -
- * 
- * OpenDroneID Bluetooth beacons identify themselves by setting the GAP AD Type to
- * "Service Data - 16-bit UUID" and the value to 0xFFFA for ASTM International, ASTM Remote ID.
- * https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile/
- * https://www.bluetooth.com/specifications/assigned-numbers/16-bit-uuids-for-sdos/
- * Vol 3, Part B, Section 2.5.1 of the Bluetooth 5.1 Core Specification
- * The AD Application Code is set to 0x0D = Open Drone ID.
- * 
-    private static final UUID SERVICE_UUID = UUID.fromString("0000fffa-0000-1000-8000-00805f9b34fb");
-    private static final byte[] OPEN_DRONE_ID_AD_CODE = new byte[]{(byte) 0x0D};
  * 
  */
      
@@ -62,27 +33,14 @@
 
 //
 
-#if defined(ARDUINO_ARCH_ESP32)
-
 #pragma GCC diagnostic warning "-Wunused-variable"
 
 #include <Arduino.h>
+
+#include <time.h>
 #include <sys/time.h>
 
 #include "id_open.h"
-
-#if ID_OD_WIFI
-
-#include <WiFi.h>
-
-#include <esp_system.h>
-
-extern "C" {
-#include <esp_wifi.h>
-esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx,const void *buffer,int len,bool en_sys_seq);
-}
-
-#endif
 
 /*
  *
@@ -98,8 +56,6 @@ ID_OpenDrone::ID_OpenDrone() {
   UAS_operator = (char *) dummy;
 
 #if ID_OD_WIFI
-
-  wifi_channel = WIFI_CHANNEL;
 
   memset(WiFi_mac_addr,0,6);
   memset(ssid,0,sizeof(ssid));
@@ -129,33 +85,6 @@ ID_OpenDrone::ID_OpenDrone() {
 #endif
 
 #endif
-
-#if ID_OD_BT
-
-  memset(&advData,0,sizeof(advData));
-
-  advData.set_scan_rsp        = false;
-  advData.include_name        = false;
-  advData.include_txpower     = false;
-  advData.min_interval        = 0x0006;
-  advData.max_interval        = 0x0050;
-  advData.flag                = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
-
-  memset(&advParams,0,sizeof(advParams));
-
-  advParams.adv_int_min       = 0x0020;
-  advParams.adv_int_max       = 0x0040;
-  advParams.adv_type          = ADV_TYPE_IND;
-  advParams.own_addr_type     = BLE_ADDR_TYPE_PUBLIC;
-  advParams.channel_map       = ADV_CHNL_ALL;
-  advParams.adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
-  advParams.peer_addr_type    = BLE_ADDR_TYPE_PUBLIC;
-
-// 
-
-  service_uuid = BLEUUID("0000fffa-0000-1000-8000-00805f9b34fb");
-
-#endif // ID_OD_BT
 
   memset(msg_counter,0,sizeof(msg_counter));
   
@@ -210,6 +139,10 @@ ID_OpenDrone::ID_OpenDrone() {
 
   operatorID_data->OperatorIdType   = ODID_OPERATOR_ID;
 
+  //
+
+  construct2();
+  
   return;
 }
 
@@ -219,7 +152,7 @@ ID_OpenDrone::ID_OpenDrone() {
 
 void ID_OpenDrone::init(UTM_parameters *parameters) {
 
-  int  status;
+  int  status, i;
   char text[128];
 
   status  = 0;
@@ -284,50 +217,16 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   //
 
-#if ID_OD_WIFI
-
-  int            i;
-  int8_t         wifi_power;
-  wifi_config_t  wifi_config;
-
   if (UAS_operator[0]) {
 
     strncpy(ssid,UAS_operator,i = sizeof(ssid)); ssid[i - 1] = 0;
   }
 
   ssid_length = strlen(ssid);
-  
-  WiFi.softAP(ssid,NULL,wifi_channel);
 
-  esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
-  
-  wifi_config.ap.ssid_hidden = 1;
-  status = esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
+  init2(ssid,ssid_length,WiFi_mac_addr,wifi_channel);
 
-  // esp_wifi_set_country();
-  status = esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
-
-  // esp_wifi_set_max_tx_power(78);
-  esp_wifi_get_max_tx_power(&wifi_power);
-
-  String address = WiFi.macAddress();
-
-  status = esp_read_mac(WiFi_mac_addr,ESP_MAC_WIFI_STA);  
-
-  if (Debug_Serial) {
-    
-    /*
-    sprintf(text,"WiFi.macAddress: %s\r\n",address.c_str());
-    Serial.print(text);
-    */
-    sprintf(text,"esp_read_mac():  %02x:%02x:%02x:%02x:%02x:%02x\r\n",
-            WiFi_mac_addr[0],WiFi_mac_addr[1],WiFi_mac_addr[2],
-            WiFi_mac_addr[3],WiFi_mac_addr[4],WiFi_mac_addr[5]);
-    Serial.print(text);
-// power <= 72, dbm = power/4, but 78 = 20dbm. 
-    sprintf(text,"max_tx_power():  %d dBm\r\n",(int) ((wifi_power + 2) / 4));
-    Debug_Serial->print(text);
-  }
+#if ID_OD_WIFI
 
 #if ID_OD_WIFI_BEACON && !USE_BEACON_FUNC
 
@@ -414,39 +313,6 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
     beacon_max_packed = (ODID_PACK_MAX_MESSAGES * ODID_MESSAGE_SIZE);
   }
   
-#endif
-
-#endif
-
-#if ID_OD_BT
-
-  int               power_db; 
-  esp_power_level_t power;
-
-  BLEDevice::init(UAS_operator);
-
-  // Using BLEDevice::setPower() seems to have no effect. 
-  // ESP_PWR_LVL_N12 ...  ESP_PWR_LVL_N0 ... ESP_PWR_LVL_P9
-
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT,ESP_PWR_LVL_P9); 
-  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,ESP_PWR_LVL_P9); 
-
-  power    = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT);
-  power_db = 3 * ((int) power - 4); 
-
-#if BLE_SERVICES
-
-  // Be careful here, if BLEAdvertising gets involved, it messes things up because it insists on
-  // transmitting stuff of no interest to us leaving no room for our message.
-
-  ble_server       = BLEDevice::createServer();
-  ble_service_dbm  = ble_server->createService((uint16_t) 0x1804);
-  ble_char_dbm     = ble_service_dbm->createCharacteristic((uint16_t) 0x2a07,BLECharacteristic::PROPERTY_READ);
-
-  ble_char_dbm->setValue(power_db);
-
-  ble_service_dbm->start();
-
 #endif
 
 #endif
@@ -764,8 +630,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #if ID_OD_WIFI
 
-  int            length;
-  esp_err_t      wifi_status;
+  int length, wifi_status;
 
 #if ID_OD_WIFI_NAN
 
@@ -776,12 +641,12 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   if ((length = odid_wifi_build_nan_sync_beacon_frame((char *) WiFi_mac_addr,
                                                       buffer,sizeof(buffer))) > 0) {
 
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,buffer,length,true);  
+    wifi_status = transmit_wifi2(buffer,length);
   }
     
   if ((Debug_Serial)&&((length < 0)||(wifi_status != 0))) {
 
-    sprintf(text,"odid_wifi_build_nan_sync_beacon_frame() = %d, esp_wifi_80211_tx() = %d\r\n",
+    sprintf(text,"odid_wifi_build_nan_sync_beacon_frame() = %d, transmit_wifi2() = %d\r\n",
             length,(int) wifi_status);
     Debug_Serial->print(text);
   }
@@ -790,12 +655,12 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
                                                               ++send_counter,
                                                               buffer,sizeof(buffer))) > 0) {
 
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,buffer,length,true);
+    wifi_status = transmit_wifi2(buffer,length);
   }
 
   if ((Debug_Serial)&&((length < 0)||(wifi_status != 0))) {
 
-    sprintf(text,"odid_wifi_build_message_pack_nan_action_frame() = %d, esp_wifi_80211_tx() = %d\r\n",
+    sprintf(text,"odid_wifi_build_message_pack_nan_action_frame() = %d, transmit_wifi2() = %d\r\n",
             length,(int) wifi_status);
     Debug_Serial->print(text);
   }
@@ -811,7 +676,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
                                                           3000,++beacon_counter,
                                                           beacon_frame,BEACON_FRAME_SIZE)) > 0) {
 
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,length,true);
+    wifi_status = transmit_wifi2(beacon_frame,length);
   }
 
 #if DIAGNOSTICS && 1
@@ -852,7 +717,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
     *beacon_length = length + 5;
     
-    wifi_status = esp_wifi_80211_tx(WIFI_IF_AP,beacon_frame,len2 = beacon_offset + length,true);
+    wifi_status = transmit_wifi2(beacon_frame,len2 = beacon_offset + length);
   }
 
 #if DIAGNOSTICS && 1
@@ -902,9 +767,8 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
 
 #if ID_OD_BT
 
-  int         i, j, k, len;
+  int         i, j, k, len, status;
   uint8_t    *a;
-  esp_err_t   status;
 
   i = j = k = len = 0;
   a = ble_message;
@@ -912,11 +776,6 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
   memset(ble_message,0,sizeof(ble_message));
 
   //
-
-  if (advertising) {
-
-    status = esp_ble_gap_stop_advertising();
-  }
 
   ble_message[j++] = 0x1e;
   ble_message[j++] = 0x16;
@@ -935,10 +794,7 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
     ble_message[j] = odid_msg[i];
   }
 
-  status = esp_ble_gap_config_adv_data_raw(ble_message,len = j); 
-  status = esp_ble_gap_start_advertising(&advParams);
-
-  advertising = 1;
+  status = transmit_ble2(ble_message,len = j); 
 
 #if DIAGNOSTICS && 0
 
@@ -989,5 +845,3 @@ int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
 /*
  *
  */
-
-#endif
