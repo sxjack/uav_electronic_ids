@@ -17,7 +17,7 @@
  */
 
 #define ID_OD_WIFI_NAN    0
-#define ID_OD_WIFI_BEACON 1
+#define ID_OD_WIFI_BEACON 0
 #define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
 
 #if ID_OD_WIFI_NAN || ID_OD_WIFI_BEACON
@@ -32,8 +32,8 @@
 #endif
 
 #define USE_BEACON_FUNC   0
-#define WIFI_CHANNEL      6        // Be carefull changing this.
-#define BEACON_FRAME_SIZE 256
+#define WIFI_CHANNEL      6        // Be careful changing this.
+#define BEACON_FRAME_SIZE 512
 
 #define ID_OD_AUTH_DATUM  1546300800LU
 
@@ -50,6 +50,7 @@
 extern "C" {
   void     construct2(void);
   void     init2(char *,int,uint8_t *,uint8_t);
+  uint8_t *capability(void);
   int      transmit_wifi2(uint8_t *,int);
   int      transmit_ble2(uint8_t *,int);
 }
@@ -77,15 +78,16 @@ private:
 
   char                    ssid[32];
   size_t                  ssid_length = 0;
+  uint8_t                 WiFi_mac_addr[6], wifi_channel = WIFI_CHANNEL;
 #if ID_OD_WIFI
-  uint8_t                 WiFi_mac_addr[6], wifi_channel = WIFI_CHANNEL;;
+  uint16_t                sequence = 1;
 #if ID_OD_WIFI_BEACON
   int                     beacon_offset = 0, beacon_max_packed = 30;
   uint8_t                 beacon_frame[BEACON_FRAME_SIZE],
 #if USE_BEACON_FUNC
                           beacon_counter = 0;
 #else
-                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length;
+                         *beacon_payload, *beacon_timestamp, *beacon_counter, *beacon_length, *beacon_seq;
 #endif
 #endif
 #endif

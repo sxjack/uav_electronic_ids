@@ -23,7 +23,6 @@
 #pragma GCC diagnostic warning "-Wunused-variable"
 
 #include <Arduino.h>
-#include <sys/time.h>
 
 #include "id_open.h"
 
@@ -88,6 +87,20 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 #endif // WIFI
 
   return;
+}
+
+/*
+ *
+ */
+
+uint8_t *capability() {
+
+  // 0x21 = ESS | Short preamble
+  // 0x04 = Short slot time
+
+  static uint8_t capa[2] = {0x21,0x04};
+  
+  return capa;
 }
 
 /*

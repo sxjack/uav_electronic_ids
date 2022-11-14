@@ -11,16 +11,14 @@
  *
  * NOTES
  *
+ * Bluetooth 4 works well with the opendroneid app on my G7.
+ * WiFi beacon works with an ESP32 scanner, but with the G7 only the occasional frame gets through.
+ *
  * Features
  *
  * esp_wifi_80211_tx() seems to zero the WiFi timestamp in addition to setting the sequence.
  * (The timestamp is set in ID_OpenDrone::transmit_wifi(), but WireShark says that it is zero.)
  *
- * Validation
- * 
- * Beacon works with the opendroneid app on my Moto G7.
- * Bluetooth 4 works well with the opendroneid app on my G7.
- * 
  * BLE
  * 
  * A case of fighting the API to get it to do what I want.
@@ -54,7 +52,6 @@
 #pragma GCC diagnostic warning "-Wunused-variable"
 
 #include <Arduino.h>
-#include <sys/time.h>
 
 #include "id_open.h"
 
@@ -65,6 +62,8 @@
 #include <esp_system.h>
 
 #include <esp_wifi.h>
+#include <esp_wifi_types.h>
+
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx,const void *buffer,int len,bool en_sys_seq);
 
 static Stream              *Debug_Serial = NULL;
@@ -134,17 +133,18 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 
 #if ID_OD_WIFI
 
-  int8_t         wifi_power;
-  wifi_config_t  wifi_config;
+  int8_t                wifi_power;
+  wifi_config_t         wifi_config;
+	static wifi_country_t country = {"GB", 1, 13, 20, WIFI_COUNTRY_POLICY_AUTO};
 
-  WiFi.softAP(ssid,NULL,wifi_channel);
+  WiFi.softAP(ssid,"password",wifi_channel);
 
   esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
   
-  wifi_config.ap.ssid_hidden = 1;
+  // wifi_config.ap.ssid_hidden = 1;
   status = esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
 
-  // esp_wifi_set_country();
+  esp_wifi_set_country(&country);
   status = esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
 
   // esp_wifi_set_max_tx_power(78);
@@ -190,6 +190,20 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 #endif
 
   return;
+}
+
+/*
+ *
+ */
+
+uint8_t *capability() {
+
+  // 0x21 = ESS | Short preamble
+  // 0x04 = Short slot time
+
+  static uint8_t capa[2] = {0x21,0x04};
+  
+  return capa;
 }
 
 /*

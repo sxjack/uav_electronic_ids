@@ -78,6 +78,7 @@ ID_OpenDrone::ID_OpenDrone() {
   beacon_counter   =
   beacon_length    =
   beacon_timestamp =
+  beacon_seq       =
   beacon_payload   = beacon_frame;
 
 #endif
@@ -245,12 +246,13 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   header                  = (struct beacon_header *) beacon_frame;
   beacon_timestamp        = header->timestamp;
-
+  beacon_seq              = header->seq;
+  
   header->control[0]      = 0x80;
   header->interval[0]     = 0xb8;
   header->interval[1]     = 0x0b;
-  header->capability[0]   = 0x21; // ESS | Short preamble
-  header->capability[1]   = 0x04; // Short slot time
+
+  memcpy(header->capability,capability(),2);
 
   for (i = 0; i < 6; ++i) {
 
@@ -274,7 +276,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   beacon_frame[beacon_offset++] = 0x01; // This is what ODID 1.0 does.
   beacon_frame[beacon_offset++] = 0x01;
   beacon_frame[beacon_offset++] = 0x8c; // 11b, 6(B) Mbit/sec
-#elif 0
+#elif 1
   beacon_frame[beacon_offset++] = 0x01; // This is what the ESP32's beacon frames do. Jams GPS?
   beacon_frame[beacon_offset++] = 0x08;
   beacon_frame[beacon_offset++] = 0x8b; //  5.5
@@ -291,7 +293,26 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   beacon_frame[beacon_offset++] = 0x03;
   beacon_frame[beacon_offset++] = 0x01;
   beacon_frame[beacon_offset++] = wifi_channel;
-  
+
+#if 1
+  // Country
+  beacon_frame[beacon_offset++] = 0x07;
+  beacon_frame[beacon_offset++] = 0x06;
+  beacon_frame[beacon_offset++] = 'G';
+  beacon_frame[beacon_offset++] = 'B';
+  beacon_frame[beacon_offset++] = 0x20;
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x0d;
+  beacon_frame[beacon_offset++] = 0x14;
+#endif
+
+#if 1
+  // Extended Rates
+  beacon_frame[beacon_offset++] = 0x32;
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x0c; //  6 
+#endif
+
   // payload
   beacon_payload      = &beacon_frame[beacon_offset];
   beacon_offset      += 7;
@@ -632,6 +653,11 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
   int length, wifi_status;
 
+  if (++sequence > 0xffffff) {
+
+    sequence = 1;
+  }
+
 #if ID_OD_WIFI_NAN
 
   char           text[128];
@@ -712,6 +738,11 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
+
+#if 0
+  beacon_seq[0] = (uint8_t) (sequence << 4);
+  beacon_seq[1] = (uint8_t) (sequence >> 4);
+#endif
 
   if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
 
