@@ -81,7 +81,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
     sprintf(text,"esp_read_mac():  %02x:%02x:%02x:%02x:%02x:%02x\r\n",
             WiFi_mac_addr[0],WiFi_mac_addr[1],WiFi_mac_addr[2],
             WiFi_mac_addr[3],WiFi_mac_addr[4],WiFi_mac_addr[5]);
-    Serial.print(text);
+    Debug_Serial->print(text);
   }
 
 #endif // WIFI

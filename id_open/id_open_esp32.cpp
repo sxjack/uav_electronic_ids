@@ -158,12 +158,12 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
     
     /*
     sprintf(text,"WiFi.macAddress: %s\r\n",address.c_str());
-    Serial.print(text);
+    Debug_Serial->print(text);
     */
     sprintf(text,"esp_read_mac():  %02x:%02x:%02x:%02x:%02x:%02x\r\n",
             WiFi_mac_addr[0],WiFi_mac_addr[1],WiFi_mac_addr[2],
             WiFi_mac_addr[3],WiFi_mac_addr[4],WiFi_mac_addr[5]);
-    Serial.print(text);
+    Debug_Serial->print(text);
 // power <= 72, dbm = power/4, but 78 = 20dbm. 
     sprintf(text,"max_tx_power():  %d dBm\r\n",(int) ((wifi_power + 2) / 4));
     Debug_Serial->print(text);
