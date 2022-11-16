@@ -5,6 +5,7 @@
  * Copyright (c) 2020-2022, Steve Jack.
  *
  * Nov. '22:    Moved the processor specific code to a separate file.
+ *              Had another attempt to get beacon to work.
  *
  * May '22:     opendroneid 2.0.
  *
@@ -39,6 +40,10 @@
 
 #include <time.h>
 #include <sys/time.h>
+
+extern "C" {
+  int clock_gettime(clockid_t,struct timespec *);
+}
 
 #include "id_open.h"
 
@@ -272,21 +277,12 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   }
 
 // Supported rates
-#if 1
+#if 0
   beacon_frame[beacon_offset++] = 0x01; // This is what ODID 1.0 does.
   beacon_frame[beacon_offset++] = 0x01;
   beacon_frame[beacon_offset++] = 0x8c; // 11b, 6(B) Mbit/sec
-#elif 1
-  beacon_frame[beacon_offset++] = 0x01; // This is what the ESP32's beacon frames do. Jams GPS?
-  beacon_frame[beacon_offset++] = 0x08;
-  beacon_frame[beacon_offset++] = 0x8b; //  5.5
-  beacon_frame[beacon_offset++] = 0x96; // 11
-  beacon_frame[beacon_offset++] = 0x82; //  1
-  beacon_frame[beacon_offset++] = 0x84; //  2
-  beacon_frame[beacon_offset++] = 0x0c; //  6, note not 0x8c
-  beacon_frame[beacon_offset++] = 0x18; // 12 
-  beacon_frame[beacon_offset++] = 0x30; // 24
-  beacon_frame[beacon_offset++] = 0x60; // 48
+#else
+  beacon_offset = tag_rates(beacon_frame,beacon_offset);
 #endif
 
   // DS
@@ -308,9 +304,11 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
 #if 1
   // Extended Rates
-  beacon_frame[beacon_offset++] = 0x32;
-  beacon_frame[beacon_offset++] = 0x01;
-  beacon_frame[beacon_offset++] = 0x0c; //  6 
+  beacon_offset = tag_ext_rates(beacon_frame,beacon_offset);
+#endif
+
+#if 0
+  beacon_offset = misc_tags(beacon_frame,beacon_offset);
 #endif
 
   // payload
@@ -651,12 +649,24 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #if ID_OD_WIFI
 
-  int length, wifi_status;
+  int      length = 0, wifi_status = 0;
+  uint64_t usecs = 0;
 
+  //
+  
   if (++sequence > 0xffffff) {
 
     sequence = 1;
   }
+
+#if not defined(ARDUINO_ARCH_RP2040)
+  struct timespec ts;
+
+  clock_gettime(CLOCK_REALTIME,&ts);
+  usecs = (uint64_t)((double) ts.tv_sec * 1e6 + (double) ts.tv_nsec * 1e-3);
+#else
+  usecs = micros();
+#endif
 
 #if ID_OD_WIFI_NAN
 
@@ -727,19 +737,16 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #else
   
-  int      i, len2 = 0;
-  uint64_t usecs;
+  int i, len2 = 0;
 
   ++*beacon_counter;
-
-  usecs = micros();
 
   for (i = 0; i < 8; ++i) {
 
     beacon_timestamp[i] = (usecs >> (i * 8)) & 0xff;
   }
 
-#if 0
+#if 1
   beacon_seq[0] = (uint8_t) (sequence << 4);
   beacon_seq[1] = (uint8_t) (sequence >> 4);
 #endif
@@ -775,7 +782,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
       Debug_Serial->print(text);
     }
 
-    sprintf(text,"... %02x\r\n",beacon_frame[len2 - 1]);
+    sprintf(text,"... %02x (%d)\r\n",beacon_frame[len2 - 1],wifi_status);
     Debug_Serial->print(text);
   }
 

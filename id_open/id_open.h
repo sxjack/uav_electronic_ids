@@ -16,9 +16,37 @@
  *  require a partition scheme with > 1.2M for the application.
  */
 
+#if defined(ARDUINO_ARCH_ESP32)
+
 #define ID_OD_WIFI_NAN    0
 #define ID_OD_WIFI_BEACON 0
 #define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
+
+#define USE_BEACON_FUNC   0
+
+#elif defined(ARDUINO_ARCH_ESP8266)
+
+#define ID_OD_WIFI_NAN    0
+#define ID_OD_WIFI_BEACON 1
+#define ID_OD_BT          0
+
+#define USE_BEACON_FUNC   0
+
+#elif defined(ARDUINO_ARCH_RP2040)
+
+// The Pico doesn't have BT and the NAN/OD beacon code needs work to get it to compile for the Pico.
+
+#define ID_OD_WIFI_NAN    0
+#define ID_OD_WIFI_BEACON 1
+#define ID_OD_BT          0
+
+#define USE_BEACON_FUNC   0
+
+#else
+
+error "No configuration for this processor."
+
+#endif
 
 #if ID_OD_WIFI_NAN || ID_OD_WIFI_BEACON
 #define ID_OD_WIFI        1
@@ -26,12 +54,6 @@
 #define ID_OD_WIFI        0
 #endif
 
-#if defined(ARDUINO_RASPBERRY_PI_PICO_W)
-#undef ID_OD_BT
-#define ID_OD_BT          0
-#endif
-
-#define USE_BEACON_FUNC   0
 #define WIFI_CHANNEL      6        // Be careful changing this.
 #define BEACON_FRAME_SIZE 512
 
@@ -47,13 +69,16 @@
 // Functions in a processor specific file.
 //
 
-extern "C" {
+// extern "C" {
   void     construct2(void);
   void     init2(char *,int,uint8_t *,uint8_t);
   uint8_t *capability(void);
+  int      tag_rates(uint8_t *,int);
+  int      tag_ext_rates(uint8_t *,int);
+  int      misc_tags(uint8_t *,int);
   int      transmit_wifi2(uint8_t *,int);
   int      transmit_ble2(uint8_t *,int);
-}
+// }
 
 //
 

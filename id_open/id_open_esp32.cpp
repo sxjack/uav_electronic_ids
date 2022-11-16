@@ -43,7 +43,7 @@
  * 
  */
 
-#define DIAGNOSTICS 0
+#define DIAGNOSTICS 1
 
 //
 
@@ -60,13 +60,17 @@
 #include <WiFi.h>
 
 #include <esp_system.h>
-
+#include <esp_event.h>
+#include <esp_event_loop.h>
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
+#include <nvs_flash.h>
 
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx,const void *buffer,int len,bool en_sys_seq);
 
-static Stream              *Debug_Serial = NULL;
+esp_err_t event_handler(void *,system_event_t *);
+
+static const char          *password = "password";
 
 #endif // WIFI
 
@@ -80,6 +84,8 @@ static esp_ble_adv_params_t advParams;
 static BLEUUID              service_uuid;
 
 #endif // BT
+
+static Stream              *Debug_Serial = NULL;
 
 /*
  *
@@ -134,15 +140,45 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 #if ID_OD_WIFI
 
   int8_t                wifi_power;
-  wifi_config_t         wifi_config;
-	static wifi_country_t country = {"GB", 1, 13, 20, WIFI_COUNTRY_POLICY_AUTO};
+  wifi_config_t         ap_config;
+  static wifi_country_t country = {"GB",1,13,20,WIFI_COUNTRY_POLICY_AUTO};
+  wifi_init_config_t    init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+
+  memset(&ap_config,0,sizeof(ap_config));
+  
+#if 0
 
   WiFi.softAP(ssid,"password",wifi_channel);
 
-  esp_wifi_get_config(WIFI_IF_AP,&wifi_config);
+  esp_wifi_get_config(WIFI_IF_AP,&ap_config);
   
-  // wifi_config.ap.ssid_hidden = 1;
-  status = esp_wifi_set_config(WIFI_IF_AP,&wifi_config);
+  // ap_config.ap.ssid_hidden = 1;
+  status = esp_wifi_set_config(WIFI_IF_AP,&ap_config);
+
+#else
+  
+  nvs_flash_init();
+  tcpip_adapter_init();
+
+  esp_event_loop_init(event_handler,NULL);
+  esp_wifi_init(&init_cfg);
+  esp_wifi_set_storage(WIFI_STORAGE_RAM);
+  esp_wifi_set_mode(WIFI_MODE_AP);
+
+  strcpy((char *) ap_config.ap.ssid,ssid);
+  strcpy((char *) ap_config.ap.password,password);
+  ap_config.ap.ssid_len        = strlen(ssid);
+  ap_config.ap.channel         = (uint8_t) wifi_channel;
+  ap_config.ap.authmode        = WIFI_AUTH_WPA2_PSK;
+  ap_config.ap.ssid_hidden     = 0;
+  ap_config.ap.max_connection  = 4;
+  ap_config.ap.beacon_interval = 1000;
+    
+  esp_wifi_set_config(WIFI_IF_AP,&ap_config);
+  esp_wifi_start();
+  esp_wifi_set_ps(WIFI_PS_NONE);
+
+#endif
 
   esp_wifi_set_country(&country);
   status = esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
@@ -150,16 +186,10 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
   // esp_wifi_set_max_tx_power(78);
   esp_wifi_get_max_tx_power(&wifi_power);
 
-  String address = WiFi.macAddress();
-
   status = esp_read_mac(WiFi_mac_addr,ESP_MAC_WIFI_STA);  
 
   if (Debug_Serial) {
     
-    /*
-    sprintf(text,"WiFi.macAddress: %s\r\n",address.c_str());
-    Debug_Serial->print(text);
-    */
     sprintf(text,"esp_read_mac():  %02x:%02x:%02x:%02x:%02x:%02x\r\n",
             WiFi_mac_addr[0],WiFi_mac_addr[1],WiFi_mac_addr[2],
             WiFi_mac_addr[3],WiFi_mac_addr[4],WiFi_mac_addr[5]);
@@ -193,7 +223,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 }
 
 /*
- *
+ * Processor dependent bits for the wifi frame header.
  */
 
 uint8_t *capability() {
@@ -204,6 +234,45 @@ uint8_t *capability() {
   static uint8_t capa[2] = {0x21,0x04};
   
   return capa;
+}
+
+//
+
+int tag_rates(uint8_t *beacon_frame,int beacon_offset) {
+
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x08;
+  beacon_frame[beacon_offset++] = 0x8b; //  5.5
+  beacon_frame[beacon_offset++] = 0x96; // 11
+  beacon_frame[beacon_offset++] = 0x82; //  1
+  beacon_frame[beacon_offset++] = 0x84; //  2
+  beacon_frame[beacon_offset++] = 0x0c; //  6
+  beacon_frame[beacon_offset++] = 0x18; // 12 
+  beacon_frame[beacon_offset++] = 0x30; // 24
+  beacon_frame[beacon_offset++] = 0x60; // 48
+
+  return beacon_offset;
+}
+
+//
+
+int tag_ext_rates(uint8_t *beacon_frame,int beacon_offset) {
+
+  beacon_frame[beacon_offset++] = 0x32;
+  beacon_frame[beacon_offset++] = 0x04;
+  beacon_frame[beacon_offset++] = 0x6c; // 54 
+  beacon_frame[beacon_offset++] = 0x12; //  9 
+  beacon_frame[beacon_offset++] = 0x24; // 18 
+  beacon_frame[beacon_offset++] = 0x48; // 36 
+
+  return beacon_offset;
+}
+
+//
+
+int misc_tags(uint8_t *beacon_frame,int beacon_offset) {
+
+  return beacon_offset;
 }
 
 /*
@@ -250,6 +319,15 @@ int transmit_ble2(uint8_t *ble_message,int length) {
 #endif // BT
 
   return (int) ble_status;
+}
+
+/*
+ *
+ */
+
+esp_err_t event_handler(void *ctx, system_event_t *event) {
+
+  return ESP_OK;
 }
 
 /*

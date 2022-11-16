@@ -34,9 +34,9 @@ extern "C" {
   int wifi_send_pkt_freedom(uint8 *,int,bool);
 }
 
-static Stream *Debug_Serial = NULL;
-
 #endif // WIFI
+
+static Stream *Debug_Serial = NULL;
 
 /*
  *
@@ -101,6 +101,45 @@ uint8_t *capability() {
   static uint8_t capa[2] = {0x21,0x04};
   
   return capa;
+}
+
+//
+
+int tag_rates(uint8_t *beacon_frame,int beacon_offset) {
+
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x08;
+  beacon_frame[beacon_offset++] = 0x8b; //  5.5
+  beacon_frame[beacon_offset++] = 0x96; // 11
+  beacon_frame[beacon_offset++] = 0x82; //  1
+  beacon_frame[beacon_offset++] = 0x84; //  2
+  beacon_frame[beacon_offset++] = 0x0c; //  6
+  beacon_frame[beacon_offset++] = 0x18; // 12 
+  beacon_frame[beacon_offset++] = 0x30; // 24
+  beacon_frame[beacon_offset++] = 0x60; // 48
+
+  return beacon_offset;
+}
+
+//
+
+int tag_ext_rates(uint8_t *beacon_frame,int beacon_offset) {
+
+  beacon_frame[beacon_offset++] = 0x32;
+  beacon_frame[beacon_offset++] = 0x04;
+  beacon_frame[beacon_offset++] = 0x6c; // 54 
+  beacon_frame[beacon_offset++] = 0x12; //  9 
+  beacon_frame[beacon_offset++] = 0x24; // 18 
+  beacon_frame[beacon_offset++] = 0x48; // 36 
+
+  return beacon_offset;
+}
+
+//
+
+int misc_tags(uint8_t *beacon_frame,int beacon_offset) {
+
+  return beacon_offset;
 }
 
 /*
