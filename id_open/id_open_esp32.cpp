@@ -55,7 +55,7 @@
 
 #include "id_open.h"
 
-#if ID_OD_WIFI 
+#if ID_OD_WIFI
 
 #include <WiFi.h>
 
@@ -325,10 +325,14 @@ int transmit_ble2(uint8_t *ble_message,int length) {
  *
  */
 
+#if ID_OD_WIFI
+
 esp_err_t event_handler(void *ctx, system_event_t *event) {
 
   return ESP_OK;
 }
+
+#endif
 
 /*
  *
