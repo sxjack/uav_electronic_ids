@@ -32,7 +32,7 @@ struct UTM_parameters {
   char    UAV_id[ID_SIZE];
   char    flight_desc[ID_SIZE];
   uint8_t UA_type, ID_type, region, spare1,
-          EU_category, EU_class, spare2, spare3;
+          EU_category, EU_class, ID_type2, spare3;
   char    UTM_id[ID_SIZE * 2];
   char    secret[4];
   uint8_t spare[28];
