@@ -93,12 +93,14 @@ public:
 
 private:
 
+  void     init_beacon(void);
   int      transmit_wifi(struct UTM_data *);
   int      transmit_ble(uint8_t *,int);
 
   int                     auth_page = 0, auth_page_count = 0;
   char                   *UAS_operator;
   uint8_t                 msg_counter[16];
+	uint16_t                wifi_interval = 0, ble_interval = 0;
   Stream                 *Debug_Serial = NULL;
 
   char                    ssid[32];
@@ -129,7 +131,7 @@ private:
   ODID_System_data       *system_data;
   ODID_OperatorID_data   *operatorID_data;
 
-  ODID_BasicID_encoded    basicID_enc;
+  ODID_BasicID_encoded    basicID_enc[2];
   ODID_Location_encoded   location_enc;
   ODID_Auth_encoded       auth_enc;
   ODID_SelfID_encoded     selfID_enc;

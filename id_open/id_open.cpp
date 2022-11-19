@@ -6,6 +6,7 @@
  *
  * Nov. '22:    Moved the processor specific code to a separate file.
  *              Had another attempt to get beacon to work.
+ *              Tidied up the scheduler.
  *
  * May '22:     opendroneid 2.0.
  *
@@ -30,7 +31,7 @@
  * 
  */
      
-#define DIAGNOSTICS 0
+#define DIAGNOSTICS 1
 
 //
 
@@ -113,9 +114,11 @@ ID_OpenDrone::ID_OpenDrone() {
     auth_data[i]->DataPage = i;
     auth_data[i]->AuthType = ODID_AUTH_NONE; // 0
   }
-
-  basicID_data->IDType              = ODID_IDTYPE_NONE; // 0
-  basicID_data->UAType              = ODID_UATYPE_NONE; // 0
+  
+  UAS_data.BasicID[0].IDType        = ODID_IDTYPE_NONE; // 0
+  UAS_data.BasicID[0].UAType        = ODID_UATYPE_NONE; // 0
+  UAS_data.BasicID[1].IDType        = ODID_IDTYPE_NONE; // 0
+  UAS_data.BasicID[1].UAType        = ODID_UATYPE_NONE; // 0
 
   odid_initLocationData(location_data);
 
@@ -126,7 +129,7 @@ ID_OpenDrone::ID_OpenDrone() {
   location_data->VertAccuracy       = ODID_VER_ACC_10_METER;
   location_data->BaroAccuracy       = ODID_VER_ACC_10_METER;
   location_data->SpeedAccuracy      = ODID_SPEED_ACC_10_METERS_PER_SECOND;
-  location_data->TSAccuracy         = ODID_TIME_ACC_1_0_SECOND;
+  location_data->TSAccuracy         = ODID_TIME_ACC_1_5_SECOND;
 
   selfID_data->DescType             = ODID_DESC_TYPE_TEXT;
   strcpy(selfID_data->Desc,"Recreational");
@@ -177,8 +180,10 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   // basic
 
-  basicID_data->UAType = (ODID_uatype_t) parameters->UA_type;
-  basicID_data->IDType = (ODID_idtype_t) parameters->ID_type;
+  UAS_data.BasicID[0].IDType        = (ODID_idtype_t) parameters->ID_type;
+  UAS_data.BasicID[0].UAType        = (ODID_uatype_t) parameters->UA_type;
+  // UAS_data.BasicID[1].IDType        = (ODID_idtype_t) parameters->ID_type2;
+  UAS_data.BasicID[1].UAType        = (ODID_uatype_t) parameters->UA_type;
 
   switch(basicID_data->IDType) {
 
@@ -214,7 +219,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   //
 
-  encodeBasicIDMessage(&basicID_enc,basicID_data);
+  encodeBasicIDMessage(&basicID_enc[0],&UAS_data.BasicID[0]);
+  encodeBasicIDMessage(&basicID_enc[1],&UAS_data.BasicID[1]);
   encodeLocationMessage(&location_enc,location_data);
   encodeAuthMessage(&auth_enc,auth_data[0]);
   encodeSelfIDMessage(&selfID_enc,selfID_data);
@@ -236,80 +242,7 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
 #if ID_OD_WIFI_BEACON && !USE_BEACON_FUNC
 
-  struct __attribute__((__packed__)) beacon_header {
-
-    uint8_t control[2];          //  0-1:  frame control  
-    uint8_t duration[2];         //  2-3:  duration
-    uint8_t dest_addr[6];        //  4-9:  destination
-    uint8_t src_addr[6];         // 10-15: source  
-    uint8_t bssid[6];            // 16-21: base station
-    uint8_t seq[2];              // 22-23: sequence
-    uint8_t timestamp[8];        // 24-31: 
-    uint8_t interval[2];         //
-    uint8_t capability[2];
-  } *header;
-
-  header                  = (struct beacon_header *) beacon_frame;
-  beacon_timestamp        = header->timestamp;
-  beacon_seq              = header->seq;
-  
-  header->control[0]      = 0x80;
-  header->interval[0]     = 0xb8;
-  header->interval[1]     = 0x0b;
-
-  memcpy(header->capability,capability(),2);
-
-  for (i = 0; i < 6; ++i) {
-
-    header->dest_addr[i] = 0xff;
-    header->src_addr[i]  = 
-    header->bssid[i]     = WiFi_mac_addr[i];
-  }
-  
-  beacon_offset = sizeof(struct beacon_header);
-
-  beacon_frame[beacon_offset++] = 0;
-  beacon_frame[beacon_offset++] = ssid_length;
-
-  for (i = 0; (i < 32)&&(ssid[i]); ++i) {
-
-    beacon_frame[beacon_offset++] = ssid[i];
-  }
-
-// Supported rates
-#if 0
-  beacon_frame[beacon_offset++] = 0x01; // This is what ODID 1.0 does.
-  beacon_frame[beacon_offset++] = 0x01;
-  beacon_frame[beacon_offset++] = 0x8c; // 11b, 6(B) Mbit/sec
-#else
-  beacon_offset = tag_rates(beacon_frame,beacon_offset);
-#endif
-
-  // DS
-  beacon_frame[beacon_offset++] = 0x03;
-  beacon_frame[beacon_offset++] = 0x01;
-  beacon_frame[beacon_offset++] = wifi_channel;
-
-#if 1
-  // Country
-  beacon_frame[beacon_offset++] = 0x07;
-  beacon_frame[beacon_offset++] = 0x06;
-  beacon_frame[beacon_offset++] = 'G';
-  beacon_frame[beacon_offset++] = 'B';
-  beacon_frame[beacon_offset++] = 0x20;
-  beacon_frame[beacon_offset++] = 0x01;
-  beacon_frame[beacon_offset++] = 0x0d;
-  beacon_frame[beacon_offset++] = 0x14;
-#endif
-
-#if 1
-  // Extended Rates
-  beacon_offset = tag_ext_rates(beacon_frame,beacon_offset);
-#endif
-
-#if 0
-  beacon_offset = misc_tags(beacon_frame,beacon_offset);
-#endif
+  init_beacon();
 
   // payload
   beacon_payload      = &beacon_frame[beacon_offset];
@@ -438,16 +371,16 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
 
 int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
-  int                     i, status,
-                          valid_data, wifi_tx_flag_1, wifi_tx_flag_2;
+  int                     i, status, wifi_tx_flag_1, wifi_tx_flag_2;
   char                    text[128];
   uint32_t                msecs;
   time_t                  secs;
   static int              phase = 0;
-  static uint32_t         last_msecs = 0;
+  static uint32_t         last_msecs = 2000;
 
   //
 
+  i       = 0;
   text[0] = 0;
   msecs   = millis();
 
@@ -470,35 +403,25 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
   //
 
-  valid_data               =
-  wifi_tx_flag_1           =
-  wifi_tx_flag_2           = 0;
+  wifi_tx_flag_1 =
+  wifi_tx_flag_2 = 0;
 
-  UAS_data.BasicIDValid[0] =
-  UAS_data.LocationValid   =
-  UAS_data.SelfIDValid     =
-  UAS_data.SystemValid     =
-  UAS_data.OperatorIDValid = 0;
+  if ((msecs > last_msecs)&&
+      ((msecs - last_msecs) > 74)) {
 
-  for (i = 0; i < ODID_AUTH_MAX_PAGES; ++i) {
+    last_msecs += 75;
 
-    UAS_data.AuthValid[i] = 0;
-  }
+    switch (phase) {
 
-  if ((msecs - last_msecs) > 74) {
-
-    last_msecs = (last_msecs) ? last_msecs + 75: msecs;
-
-    switch (++phase) {
-
-    case  4: case  8: case 12: // Every 300 ms.
-    case 16: case 20: case 24:
-    case 28: case 32: case 36:
+    case  0: case  8: case 16: case 24: case 32: // Every 600 ms.
 
       wifi_tx_flag_1 = 1;
 
+    case  4: case 12: case 20: case 28: case 36: // Every 300 ms.
+
       if (utm_data->satellites >= SATS_LEVEL_2) {
 
+        location_data->Status          = ODID_STATUS_UNDECLARED;
         location_data->Direction       = (float) utm_data->heading;
         location_data->SpeedHorizontal = 0.514444 * (float) utm_data->speed_kn;
         location_data->SpeedVertical   = INV_SPEED_V;
@@ -510,64 +433,70 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
         location_data->TimeStamp       = (float) ((utm_data->minutes * 60) + utm_data->seconds) +
                                          0.01 * (float) utm_data->csecs;
 
-        if ((status = encodeLocationMessage(&location_enc,location_data)) == ODID_SUCCESS) {
+      } else {
 
-          valid_data = UAS_data.LocationValid = 1;
+        location_data->Status = ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE;
+      }
 
-          transmit_ble((uint8_t *) &location_enc,sizeof(location_enc));
+      if ((status = encodeLocationMessage(&location_enc,location_data)) == ODID_SUCCESS) {
 
-        } else if (Debug_Serial) {
+        transmit_ble((uint8_t *) &location_enc,sizeof(location_enc));
 
-          sprintf(text,"ID_OpenDrone::%s, encodeLocationMessage returned %d\r\n",
-                  __func__,status);
-          Debug_Serial->print(text);
-        }
+      } else {
+
+        sprintf(text,"ID_OpenDrone::%s, encodeLocationMessage returned %d\r\n",
+                __func__,status);
+        Debug_Serial->print(text);
       }
 
       break;
 
-    case  6:
+    case  6: case 14: case 22: case 30: case 38: // Every 600 ms.
 
-      if (basicID_data->IDType) {
-        
-        valid_data = UAS_data.BasicIDValid[0] = 1;
-        transmit_ble((uint8_t *) &basicID_enc,sizeof(basicID_enc));
-      }
-      
-      break;
-
-    case 14:
-
-      wifi_tx_flag_2 = valid_data =
-      UAS_data.SelfIDValid        = 1;
-      transmit_ble((uint8_t *) &selfID_enc,sizeof(selfID_enc));
-      break;
-
-    case 22:
-
-      valid_data = UAS_data.SystemValid = 1;
-#if 1
       if (secs > ID_OD_AUTH_DATUM) {
 
         system_data->Timestamp = (uint32_t) (secs - ID_OD_AUTH_DATUM);
         encodeSystemMessage(&system_enc,system_data);
       }
-#endif
+
       transmit_ble((uint8_t *) &system_enc,sizeof(system_enc));
+
       break;
 
-    case 30:
+    case  2:
 
-      valid_data = UAS_data.OperatorIDValid = 1;
+      if (UAS_data.BasicID[0].IDType) {
+
+        transmit_ble((uint8_t *) &basicID_enc[0],sizeof(ODID_BasicID_encoded));
+      }
+      
+      break;
+
+    case 10:
+
+      if (UAS_data.BasicID[1].IDType) {
+
+        transmit_ble((uint8_t *) &basicID_enc[1],sizeof(ODID_BasicID_encoded));
+      }
+      
+      break;
+
+    case 18:
+
+      wifi_tx_flag_2 = 1;
+      transmit_ble((uint8_t *) &selfID_enc,sizeof(selfID_enc));
+      break;
+
+    case 26:
+
       transmit_ble((uint8_t *) &operatorID_enc,sizeof(operatorID_enc));
       break;
 
-    case 38:
+    case 34:
 
       if (auth_page_count) {
 
         encodeAuthMessage(&auth_enc,auth_data[auth_page]);
-        valid_data = UAS_data.AuthValid[auth_page] = 1;
 
         transmit_ble((uint8_t *) &auth_enc,sizeof(auth_enc));
 
@@ -581,12 +510,12 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     default:
 
-      if (phase > 39) {
-
-        phase = 0;
-      }
-
       break;
+    }
+
+    if (++phase > 39) {
+
+      phase = 0;
     }
   }
 
@@ -594,27 +523,22 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
 #if ID_OD_WIFI
 
-#if 0
-
-  // Don't pack the WiFi data, send one message at a time.
-
-  if (valid_data) {
-
-    status = transmit_wifi(utm_data);
-  }
-
-#else
-
   // Pack the WiFi data.
-  // One group every 300ms and another every 3000ms.
+  // One group every 600ms and another every 3000ms.
   
   if (wifi_tx_flag_1) { // IDs and locations.
 
-    UAS_data.SystemValid = 1;
+    UAS_data.LocationValid =
+    UAS_data.SystemValid   = 1;
 
     if (UAS_data.BasicID[0].UASID[0]) {
 
       UAS_data.BasicIDValid[0] = 1;
+    }
+
+    if (UAS_data.BasicID[1].UASID[0]) {
+
+      UAS_data.BasicIDValid[1] = 1;
     }
 
     if (UAS_data.OperatorID.OperatorId[0]) {
@@ -624,7 +548,15 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     status = transmit_wifi(utm_data);
 
+    UAS_data.BasicIDValid[0] =
+    UAS_data.BasicIDValid[1] =
+    UAS_data.LocationValid   =
+    UAS_data.SystemValid     =
+    UAS_data.OperatorIDValid = 0;
+
   } else if (wifi_tx_flag_2) { // SelfID and authentication.
+
+    UAS_data.SelfIDValid = 1;
 
     for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
 
@@ -632,13 +564,18 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
     }
       
     status = transmit_wifi(utm_data);
-  }
 
-#endif // Pack data
+    UAS_data.SelfIDValid = 0;
+
+    for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
+
+      UAS_data.AuthValid[i] = 0;
+    }
+  }
 
 #endif // ID_OD_WIFI
 
-return status;
+  return status;
 }
 
 /*
@@ -649,8 +586,10 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
 
 #if ID_OD_WIFI
 
-  int      length = 0, wifi_status = 0;
-  uint64_t usecs = 0;
+  int             length = 0, wifi_status = 0;
+  uint32_t        msecs;
+  uint64_t        usecs = 0;
+  static uint32_t last_wifi = 0;
 
   //
   
@@ -659,6 +598,10 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
     sequence = 1;
   }
 
+  msecs         = millis();
+  wifi_interval = msecs - last_wifi;
+  last_wifi     = msecs;
+  
 #if not defined(ARDUINO_ARCH_RP2040)
   struct timespec ts;
 
@@ -782,7 +725,8 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
       Debug_Serial->print(text);
     }
 
-    sprintf(text,"... %02x (%d)\r\n",beacon_frame[len2 - 1],wifi_status);
+    sprintf(text,"... %02x (%2d,%4u,%4u)\r\n",beacon_frame[len2 - 1],
+            wifi_status,wifi_interval,ble_interval);
     Debug_Serial->print(text);
   }
 
@@ -802,6 +746,13 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
  */
 
 int ID_OpenDrone::transmit_ble(uint8_t *odid_msg,int length) {
+
+  uint32_t        msecs;
+  static uint32_t last_ble;
+  
+  msecs        = millis();
+  ble_interval = msecs - last_ble;
+  last_ble     = msecs;
 
 #if ID_OD_BT
 

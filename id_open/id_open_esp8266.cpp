@@ -73,8 +73,8 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
   WiFi.setOutputPower(20.0);
 
   wifi_softap_get_config(&wifi_config);
-  wifi_config.beacon_interval = 1000;
-  wifi_softap_set_config(&wifi_config);
+  // wifi_config.beacon_interval = 1000;
+  // wifi_softap_set_config(&wifi_config);
 
   if (Debug_Serial) {
     
@@ -95,10 +95,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 
 uint8_t *capability() {
 
-  // 0x21 = ESS | Short preamble
-  // 0x04 = Short slot time
-
-  static uint8_t capa[2] = {0x21,0x04};
+  static uint8_t capa[2] = {0x11,0x00};
   
   return capa;
 }
@@ -138,6 +135,20 @@ int tag_ext_rates(uint8_t *beacon_frame,int beacon_offset) {
 //
 
 int misc_tags(uint8_t *beacon_frame,int beacon_offset) {
+
+	// Espressif
+  beacon_frame[beacon_offset++] = 0xdd;
+  beacon_frame[beacon_offset++] = 0x09;
+
+  beacon_frame[beacon_offset++] = 0x18;
+  beacon_frame[beacon_offset++] = 0xfe;
+  beacon_frame[beacon_offset++] = 0x34;
+  beacon_frame[beacon_offset++] = 0x03;
+  beacon_frame[beacon_offset++] = 0x01;
+  beacon_frame[beacon_offset++] = 0x00;
+  beacon_frame[beacon_offset++] = 0x00;
+  beacon_frame[beacon_offset++] = 0x00;
+  beacon_frame[beacon_offset++] = 0x00;
 
   return beacon_offset;
 }
