@@ -19,7 +19,7 @@
 #if defined(ARDUINO_ARCH_ESP32)
 
 #define ID_OD_WIFI_NAN    0
-#define ID_OD_WIFI_BEACON 0
+#define ID_OD_WIFI_BEACON 1
 #define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
 
 #define USE_BEACON_FUNC   0
@@ -56,6 +56,7 @@ error "No configuration for this processor."
 
 #define WIFI_CHANNEL      6        // Be careful changing this.
 #define BEACON_FRAME_SIZE 512
+#define BEACON_INTERVAL   0        // ms, defaults to 500. Android apps would prefer 100ms.
 
 #define ID_OD_AUTH_DATUM  1546300800LU
 
@@ -100,14 +101,14 @@ private:
   int                     auth_page = 0, auth_page_count = 0;
   char                   *UAS_operator;
   uint8_t                 msg_counter[16];
-	uint16_t                wifi_interval = 0, ble_interval = 0;
+  uint16_t                wifi_interval = 0, ble_interval = 0;
   Stream                 *Debug_Serial = NULL;
 
   char                    ssid[32];
   size_t                  ssid_length = 0;
   uint8_t                 WiFi_mac_addr[6], wifi_channel = WIFI_CHANNEL;
 #if ID_OD_WIFI
-  uint16_t                sequence = 1;
+  uint16_t                sequence = 1, beacon_interval = 0x200;
 #if ID_OD_WIFI_BEACON
   int                     beacon_offset = 0, beacon_max_packed = 30;
   uint8_t                 beacon_frame[BEACON_FRAME_SIZE],

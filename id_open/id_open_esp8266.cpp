@@ -73,7 +73,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
   WiFi.setOutputPower(20.0);
 
   wifi_softap_get_config(&wifi_config);
-  // wifi_config.beacon_interval = 1000;
+  // wifi_config.beacon_interval = 1000; // Pass beacon_interval from id_open.cpp?
   // wifi_softap_set_config(&wifi_config);
 
   if (Debug_Serial) {
@@ -136,7 +136,7 @@ int tag_ext_rates(uint8_t *beacon_frame,int beacon_offset) {
 
 int misc_tags(uint8_t *beacon_frame,int beacon_offset) {
 
-	// Espressif
+  // Espressif
   beacon_frame[beacon_offset++] = 0xdd;
   beacon_frame[beacon_offset++] = 0x09;
 

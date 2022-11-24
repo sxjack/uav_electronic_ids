@@ -172,7 +172,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
   ap_config.ap.authmode        = WIFI_AUTH_WPA2_PSK;
   ap_config.ap.ssid_hidden     = 0;
   ap_config.ap.max_connection  = 4;
-  ap_config.ap.beacon_interval = 1000;
+  ap_config.ap.beacon_interval = 1000; // Pass beacon_interval from id_open.cpp?
     
   esp_wifi_set_config(WIFI_IF_AP,&ap_config);
   esp_wifi_start();
