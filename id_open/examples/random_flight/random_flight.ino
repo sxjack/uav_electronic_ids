@@ -9,7 +9,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include <id_open.h>
+#include "id_open.h"
 
 static ID_OpenDrone          squitter;
 
@@ -32,15 +32,26 @@ void setup() {
   //
 
   Serial.begin(115200);
+  Serial.print("\nSerial\n\n\r");
+
+#if defined(ARDUINO_ARCH_RP2040)
+  Serial1.begin(115200);
+  Serial1.print("\nSerial1\n\n\r");
+#endif
+
+#if 0
+  Serial2.begin(115200);
+  Serial2.print("\nSerial2\n\n\r");
+#endif
 
   //
 
   memset(&clock_tm,0,sizeof(struct tm));
 
-  clock_tm.tm_hour  =  13;
-  clock_tm.tm_mday  =   3;
-  clock_tm.tm_mon   =   7;
-  clock_tm.tm_year  = 121;
+  clock_tm.tm_hour  =  10;
+  clock_tm.tm_mday  =  16;
+  clock_tm.tm_mon   =  11;
+  clock_tm.tm_year  = 122;
 
   tv.tv_sec =
   time_2    = mktime(&clock_tm);
@@ -55,7 +66,17 @@ void setup() {
 
   memset(&utm_parameters,0,sizeof(utm_parameters));
 
+#if 0
   strcpy(utm_parameters.UAS_operator,"GBR-OP-1234ABCDEFGH");
+#elif defined(ARDUINO_ARCH_ESP32)
+  strcpy(utm_parameters.UAS_operator,"GBR-OP-ESP32");
+#elif defined(ARDUINO_ARCH_ESP8266)
+  strcpy(utm_parameters.UAS_operator,"GBR-OP-ESP8266");
+#elif defined(ARDUINO_ARCH_RP2040)
+  strcpy(utm_parameters.UAS_operator,"GBR-OP-PICOW");
+#else
+  strcpy(utm_parameters.UAS_operator,"GBR-OP-UNKNOWN");
+#endif
 
   utm_parameters.region      = 1;
   utm_parameters.EU_category = 1;
@@ -148,9 +169,11 @@ void loop() {
     dtostrf(utm_data.latitude_d,10,7,lat_s);
     dtostrf(utm_data.longitude_d,10,7,long_s);
 
+#if 0
     sprintf(text,"%s,%s,%d,%d,%d\r\n",
             lat_s,long_s,utm_data.heading,utm_data.speed_kn,dir_change);
     Serial.print(text);
+#endif
 
     squitter.transmit(&utm_data);
   }
