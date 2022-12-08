@@ -70,7 +70,9 @@ esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx,const void *buffer,int len,bool
 
 esp_err_t event_handler(void *,system_event_t *);
 
+#if ESP32_WIFI_OPTION == 0
 static const char          *password = "password";
+#endif
 
 #endif // WIFI
 
@@ -142,11 +144,10 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
   int8_t                wifi_power;
   wifi_config_t         ap_config;
   static wifi_country_t country = {"GB",1,13,20,WIFI_COUNTRY_POLICY_AUTO};
-  wifi_init_config_t    init_cfg = WIFI_INIT_CONFIG_DEFAULT();
 
   memset(&ap_config,0,sizeof(ap_config));
   
-#if 0
+#if ESP32_WIFI_OPTION
 
   WiFi.softAP(ssid,"password",wifi_channel);
 
@@ -157,6 +158,8 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 
 #else
   
+  wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+
   nvs_flash_init();
   tcpip_adapter_init();
 

@@ -28,9 +28,11 @@
  *
  * NOTES
  *
+ * When porting to a different processor, check the time() function. 
+ *
  * 
  */
-     
+
 #define DIAGNOSTICS 0
 
 //
@@ -43,7 +45,8 @@
 #include <sys/time.h>
 
 extern "C" {
-  int clock_gettime(clockid_t,struct timespec *);
+  int      clock_gettime(clockid_t,struct timespec *);
+	uint64_t alt_unix_secs(int,int,int,int,int,int);
 }
 
 #include "id_open.h"
@@ -182,10 +185,17 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 
   // basic
 
-  UAS_data.BasicID[0].IDType        = (ODID_idtype_t) parameters->ID_type;
   UAS_data.BasicID[0].UAType        = (ODID_uatype_t) parameters->UA_type;
-  // UAS_data.BasicID[1].IDType        = (ODID_idtype_t) parameters->ID_type2;
   UAS_data.BasicID[1].UAType        = (ODID_uatype_t) parameters->UA_type;
+
+#if ID_NATIONAL
+
+  init_national(parameters);
+  
+#else
+  
+  UAS_data.BasicID[0].IDType        = (ODID_idtype_t) parameters->ID_type;
+  UAS_data.BasicID[1].IDType        = (ODID_idtype_t) parameters->ID_type2;
 
   switch(basicID_data->IDType) {
 
@@ -202,6 +212,8 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
   
   basicID_data->UASID[sizeof(basicID_data->UASID) - 1] = 0;
 
+#endif
+  
   // system
 
   if (parameters->region < 2) {
@@ -293,11 +305,8 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
   int      i, j;
   char     text[160];
   uint8_t  check[32];
-  time_t   secs;
 
   auth_page_count = 1;
-
-  time(&secs);
 
   if (len > MAX_AUTH_LENGTH) {
 
@@ -356,7 +365,16 @@ void ID_OpenDrone::set_auth(uint8_t *auth,short int len,uint8_t type) {
 
   auth_data[0]->LastPageIndex = (auth_page_count) ? auth_page_count - 1: 0;
   auth_data[0]->Length        = len;
+
+#if not defined(ARDUINO_ARCH_NRF52)
+  time_t   secs;
+
+  time(&secs);
+  
   auth_data[0]->Timestamp     = (uint32_t) (secs - ID_OD_AUTH_DATUM);
+#else
+  auth_data[0]->Timestamp     = 0;
+#endif
 
   if (Debug_Serial) {
 
@@ -376,7 +394,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   int              i, status;
   char             text[128];
   uint32_t         msecs;
-  time_t           secs;
+  time_t           secs = 0;
   static int       phase = 0;
   static uint32_t  last_msecs = 2000;
 
@@ -386,9 +404,26 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   text[0] = 0;
   msecs   = millis();
 
-  // For the ODID 2.0 timestamp.
-  time(&secs);
+  // For the ODID 2.0 and auth timestamps.
+#if defined(ARDUINO_ARCH_NRF52)
+  secs = alt_unix_secs(utm_data->years,utm_data->months,utm_data->days,
+                       utm_data->hours,utm_data->minutes,utm_data->seconds);
+  //  secs = ID_OD_AUTH_DATUM;
+#elif 0
+  struct tm clock_tm;
 
+  clock_tm.tm_year = utm_data->years  - 1900;
+  clock_tm.tm_mon  = utm_data->months - 1;
+  clock_tm.tm_mday = utm_data->days;
+  clock_tm.tm_hour = utm_data->hours;
+  clock_tm.tm_min  = utm_data->minutes;
+  clock_tm.tm_sec  = utm_data->seconds;
+  
+  secs = mktime(&clock_tm);
+#else
+  time(&secs);
+#endif
+  
   // 
 
   if ((!system_data->OperatorLatitude)&&(utm_data->base_valid)) {
@@ -490,6 +525,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       if (auth_page_count) {
 
+        // Refresh the timestamp on page 0?
+ 
         encodeAuthMessage(&auth_enc,auth_data[auth_page]);
 
         transmit_ble((uint8_t *) &auth_enc,sizeof(auth_enc));
@@ -519,7 +556,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
   // Pack and transmit the WiFi data.
 
-  static uint8_t  wifi_toggle = 0;
+  static uint8_t  wifi_toggle = 1;
   static uint32_t last_wifi = 0;
 
   if ((msecs - last_wifi) >= beacon_interval) {
@@ -546,7 +583,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
         UAS_data.OperatorIDValid = 1;
       }
 
-      status = transmit_wifi(utm_data);
+      status = transmit_wifi(utm_data,0);
 
       UAS_data.BasicIDValid[0] =
       UAS_data.BasicIDValid[1] =
@@ -554,8 +591,19 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
       UAS_data.SystemValid     =
       UAS_data.OperatorIDValid = 0;
 
-    } else { // SelfID and authentication.
+    } else {
 
+#if ID_NATIONAL
+
+      UAS_data.Auth[0].Timestamp = system_data->Timestamp;
+
+      // memset(UAS_data.Auth[0].AuthData,0,12);
+      encodeAuthMessage(&auth_enc,&UAS_data.Auth[0]);
+
+      status = transmit_wifi(utm_data,pack_encrypt_national(beacon_payload));
+
+#else // SelfID and authentication.
+    
       UAS_data.SelfIDValid = 1;
 
       for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
@@ -563,7 +611,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
         UAS_data.AuthValid[i] = 1;
       }
       
-      status = transmit_wifi(utm_data);
+      status = transmit_wifi(utm_data,0);
 
       UAS_data.SelfIDValid = 0;
 
@@ -571,6 +619,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
         UAS_data.AuthValid[i] = 0;
       }
+#endif
     }
   }
 
@@ -583,7 +632,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
  *
  */
 
-int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
+int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data,int prepacked) {
 
 #if ID_OD_WIFI
 
@@ -606,7 +655,7 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   wifi_interval = msecs - last_wifi;
   last_wifi     = msecs;
   
-#if not defined(ARDUINO_ARCH_RP2040)
+#if not (defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_ARCH_NRF52))
   struct timespec ts;
 
   clock_gettime(CLOCK_REALTIME,&ts);
@@ -715,10 +764,13 @@ int ID_OpenDrone::transmit_wifi(struct UTM_data *utm_data) {
   beacon_seq[1] = (uint8_t) (sequence >> 4);
 #endif
 
-  if ((length = odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed)) > 0) {
+  length = (prepacked > 0) ? prepacked:
+                             odid_message_build_pack(&UAS_data,beacon_payload,beacon_max_packed);
+
+  if (length > 0) {
 
     *beacon_length = length + 5;
-    
+
     wifi_status = transmit_wifi2(beacon_frame,len2 = beacon_offset + length);
   }
 

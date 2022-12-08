@@ -23,6 +23,7 @@
 #define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
 
 #define USE_BEACON_FUNC   0
+#define ESP32_WIFI_OPTION 0
 
 #elif defined(ARDUINO_ARCH_ESP8266)
 
@@ -42,10 +43,29 @@
 
 #define USE_BEACON_FUNC   0
 
+#elif defined(ARDUINO_ARCH_NRF52)
+
+#define ID_OD_WIFI_NAN    0
+#define ID_OD_WIFI_BEACON 0
+#define ID_OD_BT          1
+
+#define USE_BEACON_FUNC   0
+
 #else
 
 error "No configuration for this processor."
 
+#endif
+
+// National/regional specific RIDs.
+
+#define ID_JAPAN          0        // Experimental
+
+#if (ID_JAPAN) && (ID_OD_WIFI_NAN || USE_BEACON_FUNC || !ID_OD_WIFI_BEACON)
+#warning "National IDs will only work with WIFI_BEACON"
+#define ID_NATIONAL       0
+#else
+#define ID_NATIONAL       ID_JAPAN
 #endif
 
 #if ID_OD_WIFI_NAN || ID_OD_WIFI_BEACON
@@ -70,16 +90,14 @@ error "No configuration for this processor."
 // Functions in a processor specific file.
 //
 
-// extern "C" {
-  void     construct2(void);
-  void     init2(char *,int,uint8_t *,uint8_t);
-  uint8_t *capability(void);
-  int      tag_rates(uint8_t *,int);
-  int      tag_ext_rates(uint8_t *,int);
-  int      misc_tags(uint8_t *,int);
-  int      transmit_wifi2(uint8_t *,int);
-  int      transmit_ble2(uint8_t *,int);
-// }
+void     construct2(void);
+void     init2(char *,int,uint8_t *,uint8_t);
+uint8_t *capability(void);
+int      tag_rates(uint8_t *,int);
+int      tag_ext_rates(uint8_t *,int);
+int      misc_tags(uint8_t *,int);
+int      transmit_wifi2(uint8_t *,int);
+int      transmit_ble2(uint8_t *,int);
 
 //
 
@@ -91,14 +109,21 @@ public:
   void     set_auth(char *);
   void     set_auth(uint8_t *,short int,uint8_t);
   int      transmit(struct UTM_data *);
+#if ID_NATIONAL
+  void     init_national(struct UTM_parameters *);
+  void     auth_key_national(uint8_t *,int,uint8_t *,int);
+#endif
 
 private:
 
   void     init_beacon(void);
-  int      transmit_wifi(struct UTM_data *);
+#if ID_NATIONAL
+  int      pack_encrypt_national(uint8_t *);
+#endif
+  int      transmit_wifi(struct UTM_data *,int);
   int      transmit_ble(uint8_t *,int);
 
-  int                     auth_page = 0, auth_page_count = 0;
+  int                     auth_page = 0, auth_page_count = 0, key_length = 0, iv_length = 0;
   char                   *UAS_operator;
   uint8_t                 msg_counter[16];
   uint16_t                wifi_interval = 0, ble_interval = 0;
@@ -106,7 +131,8 @@ private:
 
   char                    ssid[32];
   size_t                  ssid_length = 0;
-  uint8_t                 WiFi_mac_addr[6], wifi_channel = WIFI_CHANNEL;
+  uint8_t                 WiFi_mac_addr[6], wifi_channel = WIFI_CHANNEL,
+                         *auth_key = NULL, *auth_iv = NULL;
 #if ID_OD_WIFI
   uint16_t                sequence = 1, beacon_interval = 0x200;
 #if ID_OD_WIFI_BEACON
