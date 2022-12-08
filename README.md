@@ -1,8 +1,15 @@
-# uav_electronic_ids
-A collection of programmes and libraries for Arduinos that implement various electronic IDs and ATM/UTM interfaces.
+# ID Open
+An Arduino/ESP32 class to act as a wrapper around opendroneid.
 
-Developed using a basic ESP32 dev module (https://www.banggood.com/Geekcreit-ESP32-WiFi+bluetooth-Development-Board-Ultra-Low-Power-Consumption-Dual-Cores-Pins-Unsoldered-p-1214159.html).
+Supports BLE 4, WiFi NAN and WiFi beacon.
 
-## id_scanner
+Runs on a cheap ESP32 dev board.
 
-![scanner](images/scanner.jpg)
+Needs opendroneid.c, opendroneid.h, odid_wifi.h and wifi.c from [opendroneid](https://github.com/opendroneid/opendroneid-core-c/tree/master/libopendroneid) to be copied into the id_open directory.
+
+Last tested with opendroneid release 2.0.
+
+If you are thinking of using this to make remote IDs for use in the US or EU, there are problems.
+  * It looks like both of these jurisdictions are going to require IDs to transmit ANSI/CTA serial numbers. (See the table at the bottom of [this page](https://github.com/opendroneid/opendroneid-core-c/).)
+  * The FAA are requiring remote IDs to be tamper resistant (see their [acceptance of the ASTM Means of Compliance](https://www.federalregister.gov/documents/2022/08/11/2022-16997/accepted-means-of-compliance-remote-identification-of-unmanned-aircraft) ). I don't see how this can be done with an open source, home built ID.
+
