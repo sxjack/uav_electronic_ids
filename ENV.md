@@ -7,3 +7,9 @@
   * Espressif, esp8266, 2.4.2
   * Seeed Studio, nRF52, 1.0.0
   * Earle F. Philhower, Pi Pico, 2.6.3
+* ESP32 Dev Module (the basic one off Banggood)
+* LILYGO TTGO Mini 32
+* WeMos ESP8266 D1 mini
+* Pi Pico W (future)
+* Seeed nRF52840 (future)
+
