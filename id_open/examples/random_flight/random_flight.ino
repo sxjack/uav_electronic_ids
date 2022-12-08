@@ -4,6 +4,8 @@
  * 
  */
 
+#pragma GCC diagnostic warning "-Wunused-variable"
+
 #include <Arduino.h>
 #include <math.h>
 #include <time.h>
@@ -12,6 +14,7 @@
 #include "id_open.h"
 
 static ID_OpenDrone          squitter;
+static UTM_Utilities         utm_utils;
 
 static struct UTM_parameters utm_parameters;
 static struct UTM_data       utm_data;
@@ -23,7 +26,7 @@ static double deg2rad = 0.0, m_deg_lat = 0.0, m_deg_long = 0.0;
 void setup() {
 
   char            text[64];
-  double          sin_lat, cos_lat, a, b, radius, lat_d, long_d;
+  double          lat_d, long_d;
   time_t          time_2;
   struct tm       clock_tm;
   struct timeval  tv = {0,0};
@@ -34,6 +37,7 @@ void setup() {
   Serial.begin(115200);
   Serial.print("\nSerial\n\n\r");
 
+// Do not use Serial1 if using an ESP32.
 #if defined(ARDUINO_ARCH_RP2040)
   Serial1.begin(115200);
   Serial1.print("\nSerial1\n\n\r");
@@ -43,6 +47,8 @@ void setup() {
   Serial2.begin(115200);
   Serial2.print("\nSerial2\n\n\r");
 #endif
+
+  deg2rad = (4.0 * atan(1.0)) / 180.0;
 
   //
 
@@ -107,16 +113,7 @@ void setup() {
 
   //
 
-  deg2rad     = (4.0 * atan(1.0)) / 180.0;
-
-  sin_lat     = sin(lat_d * deg2rad);
-  cos_lat     = cos(lat_d * deg2rad);
-  a           = 0.08181922;
-  b           = a * sin_lat;
-  radius      = 6378137.0 * cos_lat / sqrt(1.0 - (b * b));
-  m_deg_long  = deg2rad * radius;
-  m_deg_lat   = 111132.954 - (559.822 * cos(2.0 * lat_d * deg2rad)) - 
-                (1.175 *  cos(4.0 * lat_d * deg2rad));
+  utm_utils.calc_m_per_deg(lat_d,&m_deg_lat,&m_deg_long);
 
   //
 
@@ -169,7 +166,7 @@ void loop() {
     dtostrf(utm_data.latitude_d,10,7,lat_s);
     dtostrf(utm_data.longitude_d,10,7,long_s);
 
-#if 0
+#if 1
     sprintf(text,"%s,%s,%d,%d,%d\r\n",
             lat_s,long_s,utm_data.heading,utm_data.speed_kn,dir_change);
     Serial.print(text);
