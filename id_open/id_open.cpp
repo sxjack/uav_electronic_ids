@@ -472,7 +472,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
         transmit_ble((uint8_t *) &location_enc,sizeof(location_enc));
 
-      } else {
+      } else if (Debug_Serial) {
 
         sprintf(text,"ID_OpenDrone::%s, encodeLocationMessage returned %d\r\n",
                 __func__,status);
