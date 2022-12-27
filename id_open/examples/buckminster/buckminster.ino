@@ -166,6 +166,8 @@ void loop() {
 
   char            text[64], lat_s[16], long_s[16];
   uint32_t        msecs;
+  time_t          time_2;
+  struct tm      *gmt;
   static uint32_t last_update = 0, last_waypoint = 0;
 
   msecs = millis();
@@ -193,6 +195,14 @@ void loop() {
 
   if ((msecs - last_update) > 24) {
     last_update = msecs;
+    time(&time_2);
+
+    gmt = gmtime(&time_2);
+
+    utm_data.seconds = gmt->tm_sec;
+    utm_data.minutes = gmt->tm_min;
+    utm_data.hours   = gmt->tm_hour;
+
     squitter.transmit(&utm_data);
   }
 
