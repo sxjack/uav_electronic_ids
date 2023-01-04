@@ -15,18 +15,18 @@
  *
  * BLE_OPTION == 1
  * 
- * Uses Adafruit's BLE libraries. Works for BT4. I can't 
- * tell if it works for BT5.
+ * Uses Adafruit's BLE libraries. Works for BT4. It doesn't work for BT5 coded.
+ * Adafruit use Nordic's S140 and support for coded in S410 is experimental.
  *
  * BLE_OPTION == 2
  *
- * Uses the nRF functions directly.
- *
+ * To do. Uses the nRF functions directly.
+ * Probably easier and better to use Zephyr rather than Arduino for this.
  * 
  */
 
-#define DIAGNOSTICS 1
-#define BLE_OPTION  1
+#define DIAGNOSTICS    1
+#define BLE_OPTION     1
 
 //
 
@@ -45,12 +45,12 @@
 
 #if ID_OD_BT
 
-#include "ble.h"
-
 #if BLE_OPTION == 1
 
 // Use Adafruit's BLE libraries.
 // nRF SDK, Soft Device S140.
+
+#define PATCHED_BLEADV 0
 
 BLEService BLE_ODID_service;
 
@@ -268,11 +268,21 @@ int transmit_ble2(uint8_t *ble_message,int length) {
 
   Bluefruit.Advertising.stop();
 
-  Bluefruit.Advertising.setType((BT_type == 4) ?
-                                BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED:
-                                BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_SCANNABLE_UNDIRECTED);
-  Bluefruit.Advertising.setData(ble_message,length);
+	if (BT_type == 4) {
 
+		Bluefruit.Advertising.setType(BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED);
+#if PATCHED_BLEADV
+		Bluefruit.Advertising.setPhy(BLE_GAP_PHY_AUTO);
+#endif
+	} else {
+
+		Bluefruit.Advertising.setType(BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_SCANNABLE_UNDIRECTED);
+#if PATCHED_BLEADV
+		Bluefruit.Advertising.setPhy(BLE_GAP_PHY_CODED);
+#endif
+	}
+
+  Bluefruit.Advertising.setData(ble_message,length);
   Bluefruit.Advertising.start(0);
   
 #if DIAGNOSTICS
@@ -330,91 +340,6 @@ void check_error(char * name) {
   
   return;
 }
-
-#if 1
-
-/*
- * Copied from opendroneid's wifi.c.
- *
- * Copyright (C) 2020 Simon Wunderlich, Marek Sobe
- * Copyright (C) 2020 Doodle Labs
- *
- * SPDX-License-Identifier: Apache-2.0 
- *
- */
-
-#include <errno.h>
-
-int odid_message_build_pack(ODID_UAS_Data *UAS_Data, void *pack, size_t buflen)
-{
-    ODID_MessagePack_data msg_pack;
-    ODID_MessagePack_encoded *msg_pack_enc;
-    size_t len;
-
-    /* create a complete message pack */
-    msg_pack.SingleMessageSize = ODID_MESSAGE_SIZE;
-    msg_pack.MsgPackSize = 0;
-    for (int i = 0; i < ODID_BASIC_ID_MAX_MESSAGES; i++) {
-        if (UAS_Data->BasicIDValid[i]) {
-            if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-                return -EINVAL;
-            encodeBasicIDMessage((ODID_BasicID_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->BasicID[i]);
-            msg_pack.MsgPackSize++;
-        }
-    }
-    if (UAS_Data->LocationValid) {
-        if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-            return -EINVAL;
-        encodeLocationMessage((ODID_Location_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->Location);
-        msg_pack.MsgPackSize++;
-    }
-    for (int i = 0; i < ODID_AUTH_MAX_PAGES; i++)
-    {
-        if (UAS_Data->AuthValid[i]) {
-            if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-                return -EINVAL;
-            encodeAuthMessage((ODID_Auth_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->Auth[i]);
-            msg_pack.MsgPackSize++;
-        }
-    }
-    if (UAS_Data->SelfIDValid) {
-        if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-            return -EINVAL;
-        encodeSelfIDMessage((ODID_SelfID_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->SelfID);
-        msg_pack.MsgPackSize++;
-    }
-    if (UAS_Data->SystemValid) {
-        if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-            return -EINVAL;
-        encodeSystemMessage((ODID_System_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->System);
-        msg_pack.MsgPackSize++;
-    }
-    if (UAS_Data->OperatorIDValid) {
-        if (msg_pack.MsgPackSize >= ODID_PACK_MAX_MESSAGES)
-            return -EINVAL;
-        encodeOperatorIDMessage((ODID_OperatorID_encoded *)&msg_pack.Messages[msg_pack.MsgPackSize], &UAS_Data->OperatorID);
-        msg_pack.MsgPackSize++;
-    }
-
-    /* check that there is at least one message to send. */
-    if (msg_pack.MsgPackSize == 0)
-        return -EINVAL;
-
-    /* calculate the exact encoded message pack size. */
-    len = sizeof(*msg_pack_enc) - (ODID_PACK_MAX_MESSAGES - msg_pack.MsgPackSize) * ODID_MESSAGE_SIZE;
-
-    /* check if there is enough space for the message pack. */
-    if (len > buflen)
-        return -ENOMEM;
-
-    msg_pack_enc = (ODID_MessagePack_encoded *) pack;
-    if (encodeMessagePack(msg_pack_enc, &msg_pack) != ODID_SUCCESS)
-        return -1;
-
-    return (int) len;
-}
-
-#endif // Code from wifi.c.
 
 /*
  *

@@ -17,7 +17,7 @@
 
 #if ID_OD_BT
 
-#include "ble.h"
+#include <ble.h>
 
 /*
  *
