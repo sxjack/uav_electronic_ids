@@ -3,7 +3,7 @@
  * C++ class for Arduino to function as a wrapper around opendroneid.
  * This file has the ESP32 specific code.
  *
- * Copyright (c) 2020-2022, Steve Jack.
+ * Copyright (c) 2020-2023, Steve Jack.
  *
  * Nov. '22:  Split out from id_open.cpp. 
  *
@@ -304,10 +304,11 @@ int transmit_wifi2(uint8_t *buffer,int length) {
 
 int transmit_ble2(uint8_t *ble_message,int length) {
 
-  esp_err_t  ble_status;
-  static int advertising = 0; 
+  esp_err_t  ble_status = 0;
 
 #if ID_OD_BT
+
+  static int advertising = 0; 
 
   if (advertising) {
 
