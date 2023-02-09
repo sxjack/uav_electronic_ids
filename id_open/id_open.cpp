@@ -4,6 +4,8 @@
  *
  * Copyright (c) 2020-2022, Steve Jack.
  *
+ * Jan. '23:    Function to set the self ID.
+ *
  * Nov. '22:    Moved the processor specific code to a separate file.
  *              Had another attempt to get beacon to work.
  *              Tidied up the scheduler.
@@ -46,7 +48,7 @@
 
 extern "C" {
   int      clock_gettime(clockid_t,struct timespec *);
-	uint64_t alt_unix_secs(int,int,int,int,int,int);
+  uint64_t alt_unix_secs(int,int,int,int,int,int);
 }
 
 #include "id_open.h"
@@ -287,8 +289,22 @@ void ID_OpenDrone::init(UTM_parameters *parameters) {
 }
 
 /*
+ *
+ */
+
+void ID_OpenDrone::set_self_id(char *self_id) {
+
+  memset(selfID_data->Desc,0,ODID_STR_SIZE + 1);
+  strncpy(selfID_data->Desc,self_id,ODID_STR_SIZE);
+
+  encodeSelfIDMessage(&selfID_enc,selfID_data);
+
+  return;
+}
+
+/*
  *  These authentication functions need reviewing to make sure that they 
- *  comply with opendroneid release 1.0.
+ *  comply with opendroneid release 2.0.
  */
 
 void ID_OpenDrone::set_auth(char *auth) {
@@ -405,7 +421,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
   msecs   = millis();
 
   // For the ODID 2.0 and auth timestamps.
-#if defined(ARDUINO_ARCH_NRF52)
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_ARCH_ESP8266)
   secs = alt_unix_secs(utm_data->years,utm_data->months,utm_data->days,
                        utm_data->hours,utm_data->minutes,utm_data->seconds);
   //  secs = ID_OD_AUTH_DATUM;
@@ -462,6 +478,7 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
     
         location_data->TimeStamp       = (float) ((utm_data->minutes * 60) + utm_data->seconds) +
                                          0.01 * (float) utm_data->csecs;
+        UAS_data.LocationValid         = 1;
 
       } else {
 
@@ -563,23 +580,19 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
     last_wifi = msecs;
 
-    if (wifi_toggle ^= 1) { // IDs and locations.
+    if (wifi_toggle ^= 1) { // Basic IDs, operator, system and location.
 
-      UAS_data.LocationValid =
-      UAS_data.SystemValid   = 1;
+      UAS_data.SystemValid = 1;
 
       if (UAS_data.BasicID[0].UASID[0]) {
-
         UAS_data.BasicIDValid[0] = 1;
       }
 
       if (UAS_data.BasicID[1].UASID[0]) {
-
         UAS_data.BasicIDValid[1] = 1;
       }
 
       if (UAS_data.OperatorID.OperatorId[0]) {
-
         UAS_data.OperatorIDValid = 1;
       }
 
@@ -602,9 +615,11 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       status = transmit_wifi(utm_data,pack_encrypt_national(beacon_payload));
 
-#else // SelfID and authentication.
+#else // Self ID, authentication and location.
     
-      UAS_data.SelfIDValid = 1;
+      if (UAS_data.SelfID.Desc[0]) {
+        UAS_data.SelfIDValid = 1;
+      }
 
       for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
 
@@ -613,7 +628,8 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
       
       status = transmit_wifi(utm_data,0);
 
-      UAS_data.SelfIDValid = 0;
+      UAS_data.LocationValid =
+      UAS_data.SelfIDValid   = 0;
 
       for (i = 0; (i < auth_page_count)&&(i < ODID_AUTH_MAX_PAGES); ++i) {
 
