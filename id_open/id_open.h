@@ -20,7 +20,7 @@
 
 #define ID_OD_WIFI_NAN    0
 #define ID_OD_WIFI_BEACON 1
-#define ID_OD_BT          1        // ASTM F3411-19 / ASD-STAN 4709-002.
+#define ID_OD_BT          0        // ASTM F3411-19 / ASD-STAN 4709-002.
 
 #define USE_BEACON_FUNC   0
 #define ESP32_WIFI_OPTION 0
@@ -106,6 +106,7 @@ class ID_OpenDrone {
 public:
            ID_OpenDrone();
   void     init(struct UTM_parameters *);
+  void     set_self_id(char *);
   void     set_auth(char *);
   void     set_auth(uint8_t *,short int,uint8_t);
   int      transmit(struct UTM_data *);
