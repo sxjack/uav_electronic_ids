@@ -143,7 +143,7 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
 
   int8_t                wifi_power;
   wifi_config_t         ap_config;
-  static wifi_country_t country = {"GB",1,13,20,WIFI_COUNTRY_POLICY_AUTO};
+  static wifi_country_t country = {WIFI_COUNTRY_CC,1,WIFI_COUNTRY_NCHAN,20,WIFI_COUNTRY_POLICY_AUTO};
 
   memset(&ap_config,0,sizeof(ap_config));
   
@@ -199,6 +199,8 @@ void init2(char *ssid,int ssid_length,uint8_t *WiFi_mac_addr,uint8_t wifi_channe
     Debug_Serial->print(text);
 // power <= 72, dbm = power/4, but 78 = 20dbm. 
     sprintf(text,"max_tx_power():  %d dBm\r\n",(int) ((wifi_power + 2) / 4));
+    Debug_Serial->print(text);
+    sprintf(text,"wifi country:    %s\r\n",country.cc);
     Debug_Serial->print(text);
   }
 

@@ -3,7 +3,9 @@
  * C++ class for Arduino to function as a wrapper around opendroneid.
  * This file has the wifi beacon setup code.
  *
- * Copyright (c) 2022, Steve Jack.
+ * Copyright (c) 2023, Steve Jack.
+ *
+ * May  '23:  WiFi country code now defined in id_open.h.
  *
  * Nov. '22:  Split out from id_open.cpp.
  *
@@ -31,7 +33,9 @@
 
 void ID_OpenDrone::init_beacon() {
 
-  int i;
+  int           i;
+  const uint8_t wifi_channels  = WIFI_COUNTRY_NCHAN;
+  const char    wifi_country[] = WIFI_COUNTRY_CC;
 
   struct __attribute__((__packed__)) beacon_header {
 
@@ -101,11 +105,11 @@ void ID_OpenDrone::init_beacon() {
   // Country Information
   beacon_frame[beacon_offset++] = 0x07;
   beacon_frame[beacon_offset++] = 0x06;
-  beacon_frame[beacon_offset++] = 'G';
-  beacon_frame[beacon_offset++] = 'B';
+  beacon_frame[beacon_offset++] = wifi_country[0];
+  beacon_frame[beacon_offset++] = wifi_country[1];
   beacon_frame[beacon_offset++] = 0x20;
   beacon_frame[beacon_offset++] = 0x01;
-  beacon_frame[beacon_offset++] = 0x0d;
+  beacon_frame[beacon_offset++] = wifi_channels;
   beacon_frame[beacon_offset++] = 0x14;
 #endif
 

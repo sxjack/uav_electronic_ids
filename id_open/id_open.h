@@ -2,7 +2,7 @@
  *
  * C++ class for Arduino to function as a wrapper around opendroneid.
  *
- * Copyright (c) 2020-2022, Steve Jack.
+ * Copyright (c) 2020-2023, Steve Jack.
  *
  * MIT licence.
  *
@@ -77,6 +77,16 @@ error "No configuration for this processor."
 #define WIFI_CHANNEL      6        // Be careful changing this.
 #define BEACON_FRAME_SIZE 512
 #define BEACON_INTERVAL   0        // ms, defaults to 500. Android apps would prefer 100ms.
+
+// Used by the id_open_beacon and id_open_esp32.
+ 
+#if ID_JAPAN
+#define WIFI_COUNTRY_CC    "JP"
+#define WIFI_COUNTRY_NCHAN 13
+#else
+#define WIFI_COUNTRY_CC    "ZZ"
+#define WIFI_COUNTRY_NCHAN 11
+#endif
 
 #define ID_OD_AUTH_DATUM  1546300800LU
 
