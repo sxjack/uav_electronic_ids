@@ -482,7 +482,17 @@ int ID_OpenDrone::transmit(struct UTM_data *utm_data) {
 
       } else {
 
-        location_data->Status = ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE;
+        location_data->Status          = ODID_STATUS_REMOTE_ID_SYSTEM_FAILURE;
+        location_data->Direction       = INV_DIR;
+        location_data->SpeedHorizontal = INV_SPEED_H;
+        location_data->SpeedVertical   = INV_SPEED_V;
+        location_data->Latitude        = MIN_LAT;
+        location_data->Longitude       = MIN_LON;
+        location_data->Height          = INV_ALT;
+        location_data->AltitudeGeo     = INV_ALT;
+    
+        location_data->TimeStamp       = INV_TIMESTAMP;
+        UAS_data.LocationValid         = 0;
       }
 
       if ((status = encodeLocationMessage(&location_enc,location_data)) == ODID_SUCCESS) {
