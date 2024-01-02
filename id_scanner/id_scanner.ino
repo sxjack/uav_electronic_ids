@@ -226,6 +226,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
           case 0x00: // basic
 
             decodeBasicIDMessage(&odid_basic,(ODID_BasicID_encoded *) odid);
+            strncpy((char *)UAV->uav_id, (char *)odid_basic.UASID, ODID_ID_SIZE); // added did not see uav_id in output
             break;
 
           case 0x10: // location
@@ -815,7 +816,7 @@ void loop() {
 
 void print_json(int index,int secs,struct id_data *UAV) {
 
-  char text[128], text1[16],text2[16], text3[16], text4[16];
+  char text[128+ODID_ID_SIZE+20], text1[16], text2[16], text3[16], text4[16]; // added addition room for both ids(oper and uav) and labels to text
 
   dtostrf(UAV->lat_d,11,6,text1);
   dtostrf(UAV->long_d,11,6,text2);
@@ -826,8 +827,8 @@ void print_json(int index,int secs,struct id_data *UAV) {
           index,secs,
           UAV->mac[0],UAV->mac[1],UAV->mac[2],UAV->mac[3],UAV->mac[4],UAV->mac[5]);
   Serial.print(text);
-  sprintf(text,"\"id\": \"%s\", \"uav latitude\": %s, \"uav longitude\": %s, \"alitude msl\": %d, ",
-          UAV->op_id,text1,text2,UAV->altitude_msl);
+  sprintf(text, "\"OprId\": \"%s\", \"UavId\": \"%s\", \"uav latitude\": %s, \"uav longitude\": %s, \"alitude msl\": %d, ",
+          UAV->op_id, UAV->uav_id, text1, text2, UAV->altitude_msl);  //output both uav and opr ids.
   Serial.print(text);
   sprintf(text,"\"height agl\": %d, \"base latitude\": %s, \"base longitude\": %s, \"speed\": %d, \"heading\": %d }\r\n",
           UAV->height_agl,text3,text4,UAV->speed,UAV->heading);
@@ -1033,6 +1034,7 @@ struct id_data *next_uav(uint8_t *mac) {
     if (memcmp((void *) uavs[i].mac,mac,6) == 0) {
 
       UAV = (struct id_data *) &uavs[i];
+      return UAV; // optimization
     }
   }
 
@@ -1043,7 +1045,8 @@ struct id_data *next_uav(uint8_t *mac) {
       if (!uavs[i].mac[0]) {
 
         UAV = (struct id_data *) &uavs[i];
-        break;
+        return UAV; //optimization
+        //break;
       }
     }
   }
