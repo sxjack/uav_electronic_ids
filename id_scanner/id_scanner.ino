@@ -169,6 +169,7 @@ static uint32_t  track_colours[MAX_UAVS + 1];
 
 BLEScan *BLE_scan;
 BLEUUID  service_uuid;
+uint32_t last_ble_scan = 0; //moved from main loop
 
 //
 
@@ -475,7 +476,7 @@ void loop() {
 
 #if BLE_SCAN
 
-  uint32_t last_ble_scan = 0;
+  //uint32_t last_ble_scan = 0; moved to global variable
 
   if ((msecs - last_ble_scan) > 2000) {
 
