@@ -221,37 +221,40 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 
           memcpy(UAV->mac,mac,6);
 
-          switch (odid[0] & 0xf0) {
+          switch (decodeMessageType(odid[0])) {
 
-          case 0x00: // basic
+          case ODID_MESSAGETYPE_BASIC_ID:  // basic
 
-            decodeBasicIDMessage(&odid_basic,(ODID_BasicID_encoded *) odid);
+            decodeBasicIDMessage(&odid_basic, (ODID_BasicID_encoded *)odid);           
+            strncpy((char *)UAV->uav_id, (char *)odid_basic.UASID, ODID_ID_SIZE);
+
             break;
 
-          case 0x10: // location
-          
-            decodeLocationMessage(&odid_location,(ODID_Location_encoded *) odid);
-            UAV->lat_d        = odid_location.Latitude;
-            UAV->long_d       = odid_location.Longitude;
-            UAV->altitude_msl = (int) odid_location.AltitudeGeo;
-            UAV->height_agl   = (int) odid_location.Height;
-            UAV->speed        = (int) odid_location.SpeedHorizontal;
-            UAV->heading      = (int) odid_location.Direction;
+          case ODID_MESSAGETYPE_LOCATION:  // location
+
+            decodeLocationMessage(&odid_location, (ODID_Location_encoded *)odid);
+            UAV->lat_d = odid_location.Latitude;
+            UAV->long_d = odid_location.Longitude;
+            UAV->altitude_msl = (int)odid_location.AltitudeGeo;
+            UAV->height_agl = (int)odid_location.Height;
+            UAV->speed = (int)odid_location.SpeedHorizontal;
+            UAV->heading = (int)odid_location.Direction;
+
             break;
 
-          case 0x40: // system
+          case ODID_MESSAGETYPE_SYSTEM:  // system
 
-            decodeSystemMessage(&odid_system,(ODID_System_encoded *) odid);
-            UAV->base_lat_d   = odid_system.OperatorLatitude;
-            UAV->base_long_d  = odid_system.OperatorLongitude;
+            decodeSystemMessage(&odid_system, (ODID_System_encoded *)odid);
+            UAV->base_lat_d = odid_system.OperatorLatitude;
+            UAV->base_long_d = odid_system.OperatorLongitude;
             break;
 
-          case 0x50: // operator
+          case ODID_MESSAGETYPE_OPERATOR_ID:  // operator
 
-            decodeOperatorIDMessage(&odid_operator,(ODID_OperatorID_encoded *) odid);
-            strncpy((char *) UAV->op_id,(char *) odid_operator.OperatorId,ODID_ID_SIZE);
+            decodeOperatorIDMessage(&odid_operator, (ODID_OperatorID_encoded *)odid);
+            strncpy((char *)UAV->op_id, (char *)odid_operator.OperatorId, ODID_ID_SIZE);
             break;
-          }
+        }
 
           ++odid_ble;
         }
